@@ -2,6 +2,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from .routes.vision import router as vision_router
 from .services.routing_service import routing_service, NoSafeRouteError, OutsideCoverageError
 
 from app.database.connection import init_db
@@ -51,6 +52,7 @@ app.include_router(cop_router)
 app.include_router(geo_router)
 app.include_router(evidence_router)
 app.include_router(simulation_router)
+app.include_router(vision_router)
 
 @app.get("/")
 def read_root():

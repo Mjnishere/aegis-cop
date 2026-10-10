@@ -12,6 +12,7 @@ import Icon from './ui/Icon';
 import ThemeSelector from './ui/ThemeSelector';
 import { useCOP } from '../hooks/useCOP';
 import { API_BASE_URL } from '../config';
+import VideoIntelligence from './VideoIntelligence';
 
 export default function EocDashboard({
   viewMode,
@@ -474,6 +475,7 @@ export default function EocDashboard({
                   {weatherForecast?.is_controlled_scenario ? 'SCENARIO' : weatherForecast?.status === 'success' ? 'LIVE' : 'N/A'}
                 </span> },
               { id: 'satellite', label: 'Satellite', icon: 'satellite' },
+              { id: 'video', label: 'Video Intelligence', icon: 'eye' },
               { id: 'national', label: 'Regional Overview', icon: 'globe' },
             ].map((item) => {
               const active = activeTab === item.id;
@@ -898,6 +900,11 @@ export default function EocDashboard({
             <NationalView />
           </div>
         )}
+        {activeTab === 'video' && (
+  <div className="flex-1 min-h-0 overflow-y-auto bg-canvas">
+    <VideoIntelligence />
+  </div>
+)}
 
       </div>
 
