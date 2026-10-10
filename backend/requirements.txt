@@ -1,0 +1,15 @@
+# Runtime dependencies. Exact versions: requirements.lock.txt (use as constraints).
+fastapi
+uvicorn
+pydantic
+python-dotenv
+python-multipart
+python-dateutil
+osmnx==2.1.1
+networkx
+geopandas
+shapely
+scikit-learn
+rasterio
+requests
+sqlalchemy>=2.0.0
