@@ -65,7 +65,7 @@ class CopService:
                     first_seen=t.get("first_seen") or t.get("created_at"),
                     last_seen=t.get("last_seen") or t.get("updated_at"),
                     source=t.get("source"),
-                    is_demo=t.get("source") == "CONTROLLED_DEMO",
+                    is_demo=t.get("source") in ("CONTROLLED_DEMO", "SIMULATED_REPORT"),
                 )
             )
 

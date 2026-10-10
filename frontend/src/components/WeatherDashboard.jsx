@@ -93,7 +93,7 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
             </h1>
           </div>
           <p className="text-slate-400 text-xs font-mono">
-            Open-Meteo Real-Time Weather Forecast & Municipal Early Preparedness Decision Support
+            Open-Meteo forecast (single point, when reachable) & heuristic preparedness levels
           </p>
         </div>
 
@@ -125,13 +125,24 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
           Loading weather forecast...
         </div>
       ) : (error || forecast?.status === 'unavailable') ? (
-        <div className="p-8 bg-red-50 text-red-800 border border-red-200 rounded-xl text-center space-y-2">
-          <div className="text-base font-bold font-mono">
-            ⚠️ WEATHER DATA TEMPORARILY UNAVAILABLE
-          </div>
-          <p className="text-xs text-red-600 font-mono">
-            {error || forecast?.error || "Unable to retrieve Open-Meteo forecast data. Check backend connectivity."}
+        <div className="p-6 bg-amber-50 text-amber-900 border border-amber-200 rounded-xl space-y-3 max-w-3xl">
+          <div className="text-base font-bold">Weather data unavailable — conditions are unknown</div>
+          <p className="text-sm">
+            {error
+              ? 'The backend could not be reached, so no forecast was loaded.'
+              : 'The backend could not obtain a forecast from its weather provider (Open-Meteo). This is expected when the backend runs offline.'}
           </p>
+          <ul className="text-sm list-disc pl-5 space-y-1">
+            <li>Hazard scores treat weather as <b>unknown</b>, not as zero rain: they are marked partial and show an upper bound.</li>
+            <li>Threat-zone routing, route monitoring and the mission workflow do not depend on weather and keep working.</li>
+            <li>For a demonstration with weather inputs, use <b>RAIN SCENARIO (SIMULATED)</b> in the header (a labelled, controlled scenario — not an observation).</li>
+          </ul>
+          {(error || forecast?.error) && (
+            <details className="text-xs text-amber-800">
+              <summary className="cursor-pointer font-semibold">Technical detail</summary>
+              <pre className="mt-1 whitespace-pre-wrap break-all font-mono bg-white/60 p-2 rounded border border-amber-200">{error || forecast?.error}</pre>
+            </details>
+          )}
         </div>
       ) : (
         <>

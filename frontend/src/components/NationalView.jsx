@@ -41,7 +41,7 @@ export default function NationalView() {
   const [municipalNotification, setMunicipalNotification] = useState(null);
   const [ndrfRecommendation, setNdrfRecommendation] = useState(null);
   const [nationalAuditLog, setNationalAuditLog] = useState([
-    { time: new Date().toLocaleTimeString(), event: 'NATIONAL MONITORING INITIALIZED', details: 'Listening across 16 state hazard zones' }
+    { time: new Date().toLocaleTimeString(), event: 'NATIONAL VIEW OPENED', details: 'Client-side log of actions taken in this session' }
   ]);
 
   const [fieldUnits, setFieldUnits] = useState([]);
@@ -70,11 +70,8 @@ export default function NationalView() {
 
   if (loading) return <div className="p-4 bg-[#F5F7FA] text-slate-700 font-bold">Loading National Risk Intelligence...</div>;
 
-  const regions = (riskData?.regions && riskData.regions.length > 0) ? riskData.regions : [
-    { id: 'R1', district: 'Dharwad', state: 'Karnataka', risk: { level: 'CRITICAL', score: 88 }, official_warning: { level: 'RED' }, latitude: 15.4589, longitude: 75.0078, roads: 3, drainageAlerts: 2, demo: true },
-    { id: 'R2', district: 'Belagavi', state: 'Karnataka', risk: { level: 'HIGH', score: 74 }, official_warning: { level: 'ORANGE' }, latitude: 15.8497, longitude: 74.4977, roads: 2, drainageAlerts: 1, demo: true },
-    { id: 'R3', district: 'Uttara Kannada', state: 'Karnataka', risk: { level: 'WATCH', score: 45 }, official_warning: { level: 'YELLOW' }, latitude: 14.8058, longitude: 74.1305, roads: 1, drainageAlerts: 0, demo: true }
-  ];
+  // Only backend regions are shown; no placeholder regions or scores are substituted.
+  const regions = riskData?.regions || [];
   
   const validRegions = regions.filter(r => r && typeof r.latitude === 'number' && typeof r.longitude === 'number' && !isNaN(r.latitude) && !isNaN(r.longitude));
   const selectedRegion = selectedRegionId ? validRegions.find(r => r.id === selectedRegionId) : validRegions[0];
@@ -131,6 +128,14 @@ export default function NationalView() {
               AFFECTED REGIONS DIRECTORY
             </h2>
             <div className="space-y-2">
+              {regions.length === 0 && (
+                <div className="text-[11px] text-slate-600 bg-slate-50 border border-dashed border-slate-300 rounded p-3">
+                  No regional assessments available. The backend's regional risk feed returned no regions
+                  (feed mode: {riskData?.mode || (riskData ? 'unknown' : 'backend unreachable')}; it requires
+                  configured IMD access). Nothing is substituted. The Hubballi-Dharwad mission workflow on the
+                  Overview tab does not depend on this feed.
+                </div>
+              )}
               {regions.map(r => (
                 <div
                   key={r.id}
@@ -146,8 +151,10 @@ export default function NationalView() {
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-500 flex justify-between">
-                    <span>Roads: {r.roads || 3} | Drains: {r.drainageAlerts || 2}</span>
-                    <span className="text-amber-700 font-bold">DEMO SCENARIO</span>
+                    <span>Roads: {r.roads ?? '—'} | Drains: {r.drainageAlerts ?? '—'}</span>
+                    {r.demo
+                      ? <span className="text-amber-700 font-bold">DEMO PLACEHOLDER (backend data unavailable)</span>
+                      : <span className="text-slate-600 font-bold">BACKEND HEURISTIC</span>}
                   </div>
                 </div>
               ))}

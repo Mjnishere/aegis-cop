@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from app.database.connection import get_db_context
 from app.models.route_recommendation import RouteRecommendationModel
 
@@ -13,6 +13,14 @@ class RouteRecommendationRepository:
             if not rec:
                 return None
             return self._to_dict(rec)
+
+    def list_for_route(self, route_id: str) -> List[Dict[str, Any]]:
+        """Recommendations for one route, oldest first."""
+        with get_db_context() as db:
+            recs = db.query(RouteRecommendationModel).filter(
+                RouteRecommendationModel.route_id == route_id
+            ).order_by(RouteRecommendationModel.created_at).all()
+            return [self._to_dict(r) for r in recs]
 
     def save(self, data: Dict[str, Any]) -> Dict[str, Any]:
         with get_db_context() as db:

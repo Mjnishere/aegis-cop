@@ -5,7 +5,8 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
   const [incidents, setIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(sharedSelectedIncident || null);
   const [activePlan, setActivePlan] = useState(null);
-  const [teamAssigned, setTeamAssigned] = useState(false);
+  const [linkedEvidence, setLinkedEvidence] = useState(null);
+  const [dispatching, setDispatching] = useState(null);
   const [loading, setLoading] = useState(true);
   const [scanStep, setScanStep] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
@@ -24,9 +25,10 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
   useEffect(() => {
     if (selectedIncident?.incident_id) {
       fetchResponsePlan(selectedIncident.incident_id);
+      fetchLinkedEvidence(selectedIncident.incident_id);
     } else {
       setActivePlan(null);
-      setTeamAssigned(false);
+      setLinkedEvidence(null);
     }
   }, [selectedIncident]);
 
@@ -49,9 +51,17 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
     }
   }
 
+  async function fetchLinkedEvidence(incId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/evidence?threat_id=${encodeURIComponent(incId)}`);
+      setLinkedEvidence(res.ok ? await res.json() : null);
+    } catch {
+      setLinkedEvidence(null);
+    }
+  }
+
   async function fetchResponsePlan(incId) {
     try {
-      setTeamAssigned(false);
       const res = await fetch(`${API_BASE_URL}/national/incidents/${incId}/response-plan`);
       if (res.ok) {
         const data = await res.json();
@@ -76,20 +86,15 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
 
   async function handleScanForIncidents() {
     try {
-      setScanStep('SCANNING WEATHER CONDITIONS...');
-      await new Promise(r => setTimeout(r, 500));
-
-      setScanStep('ASSESSING FLOOD RISK...');
-      await new Promise(r => setTimeout(r, 500));
-
-      setScanStep('IDENTIFYING INCIDENTS...');
+      setScanStep('SCANNING...');
       const res = await fetch(`${API_BASE_URL}/national/incidents/recommend`, { method: 'POST' });
-      await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
 
-      setScanStep('INCIDENTS READY');
+      setScanStep('SCAN COMPLETE');
       await fetchIncidents();
 
-      showToast("Incident scan complete. Active candidates populated.", "success");
+      showToast("Incident scan complete (rules applied to available weather/terrain data).", "success");
       setTimeout(() => setScanStep(null), 2000);
     } catch (err) {
       showToast("Error scanning incidents: " + err.message, "error");
@@ -126,7 +131,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
       const data = await res.json();
       if (res.ok && data.plan) {
         setActivePlan(data.plan);
-        showToast(`✓ Response plan approved for ${selectedIncident.title} — Resources Reserved`, "success");
+        showToast(`✓ Response plan approved for ${selectedIncident.title}`, "success");
         fetchIncidents();
       } else {
         throw new Error(data.detail || "Approval failed");
@@ -138,10 +143,20 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
     }
   }
 
-  async function handleAssignTeam() {
-    if (!selectedIncident?.incident_id) return;
-    setTeamAssigned(true);
-    showToast(`✓ Response Team Assigned to ${selectedIncident.title}`, "success");
+  async function handleSimulatedDispatch(action) {
+    if (dispatching) return;
+    try {
+      setDispatching(action.action_id);
+      const res = await fetch(`${API_BASE_URL}/national/response-actions/${action.action_id}/dispatch`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      showToast(data.message || 'SIMULATED dispatch recorded.', "success");
+      await fetchResponsePlan(selectedIncident.incident_id);
+    } catch (err) {
+      showToast("Simulated dispatch rejected: " + err.message, "error");
+    } finally {
+      setDispatching(null);
+    }
   }
 
   async function handleAction(id, actionPath) {
@@ -249,7 +264,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                     <p className="font-bold text-sm text-slate-900">{inc.title}</p>
                     <p className="text-xs text-slate-600">📍 {inc.district}, {inc.state}</p>
                     <div className="mt-2 text-[10px] text-slate-500 flex justify-between border-t border-slate-200 pt-1">
-                      <span>Risk Score: <strong className="text-red-700">{inc.risk_score}/100</strong></span>
+                      <span>Severity score: <strong className="text-red-700">{inc.risk_score}/100</strong></span>
                       <span>{inc.source}</span>
                     </div>
                   </div>
@@ -290,8 +305,8 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-1">
                   <p className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider mb-1">EVIDENCE & INTELLIGENCE</p>
-                  <p><b>Official Warning:</b> <span className="text-slate-800">{selectedIncident.official_warning || 'None'}</span></p>
-                  <p><b>Risk Score:</b> <span className="text-red-700 font-mono font-bold">{selectedIncident.risk_score}/100</span></p>
+                  <p><b>Official Warning:</b> <span className="text-slate-800">{['NONE', 'NORMAL', null, undefined, ''].includes(selectedIncident.official_warning) ? 'None linked' : selectedIncident.official_warning}</span></p>
+                  <p><b>Severity score:</b> <span className="text-red-700 font-mono font-bold">{selectedIncident.risk_score}/100</span> <span className="text-slate-500 text-[10px]">(fixed per severity level, not a calibrated risk)</span></p>
                   <p><b>Confidence:</b> <span className="text-slate-800">{selectedIncident.confidence}</span></p>
                   <p><b>Data Source:</b> <span className="text-slate-800">{selectedIncident.source}</span></p>
                 </div>
@@ -306,28 +321,31 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                 </div>
               </div>
 
-              {/* Visual Field Evidence Photo Card Section */}
+              {/* Linked evidence records (backend) */}
               <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                  <p className="font-extrabold text-[10px] text-slate-700 uppercase tracking-wider">VISUAL FIELD EVIDENCE & PHOTOGRAPH</p>
-                  <span className="text-[9px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded font-bold">
-                    VERIFIED INCIDENT EVIDENCE
-                  </span>
+                  <p className="font-extrabold text-[10px] text-slate-700 uppercase tracking-wider">LINKED EVIDENCE RECORDS</p>
+                  <span className="text-[9px] text-slate-500 font-mono">GET /api/evidence?threat_id=</span>
                 </div>
-                <div className="bg-white p-3 rounded border border-slate-200 shadow-sm space-y-2">
-                  <div className="h-44 w-full bg-slate-800 rounded flex flex-col justify-end p-3 text-white relative overflow-hidden bg-cover bg-center" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1541888946425-d0fbb186a5b3?auto=format&fit=crop&w=800&q=80')" }}>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent"></div>
-                    <div className="relative z-10">
-                      <div className="font-extrabold text-sm text-white drop-shadow">📷 {selectedIncident.title}</div>
-                      <div className="text-[11px] text-slate-300">Reported Location: {selectedIncident.district}, {selectedIncident.city || 'Hubballi'} ({selectedIncident.latitude?.toFixed(4)}, {selectedIncident.longitude?.toFixed(4)})</div>
-                      <div className="text-[10px] text-emerald-400 font-mono font-bold mt-0.5">Reported at: {new Date(selectedIncident.reported_at || selectedIncident.created_at || Date.now()).toLocaleTimeString()} IST</div>
+                {linkedEvidence === null ? (
+                  <p className="text-[11px] text-slate-500 italic">Evidence records unavailable.</p>
+                ) : linkedEvidence.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 italic">No evidence records are linked to this incident. Its source is {selectedIncident.source || 'unknown'}.</p>
+                ) : linkedEvidence.map(ev => (
+                  <div key={ev.evidence_id} className="bg-white p-2 rounded border border-slate-200 text-[11px] space-y-0.5">
+                    <div className="flex justify-between">
+                      <b>{ev.evidence_id}</b>
+                      {ev.provenance?.is_simulation
+                        ? <span className="text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1 rounded">SIMULATED</span>
+                        : <span className="text-[9px] font-bold text-slate-600 border border-slate-200 px-1 rounded">{ev.status}</span>}
+                    </div>
+                    <div>{ev.source_type} · {ev.source_id} · {ev.observation_type}</div>
+                    <div className="text-slate-600">{ev.description}</div>
+                    <div className="text-slate-500 font-mono text-[10px]">
+                      {ev.timestamp} · ({ev.latitude?.toFixed(4)}, {ev.longitude?.toFixed(4)}) · source-declared confidence {ev.confidence ?? 'n/a'}
                     </div>
                   </div>
-                  <div className="text-[11px] text-slate-700 flex justify-between bg-slate-50 p-2 rounded">
-                    <span><b>Hazard Type:</b> {selectedIncident.hazard_type}</span>
-                    <span><b>Evidence Status:</b> <strong className="text-emerald-700">VERIFIED FIELD EVIDENCE</strong></span>
-                  </div>
-                </div>
+                ))}
               </div>
 
               {/* Incident Response Plan & Resource Assignment Section */}
@@ -363,17 +381,15 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                           <li key={idx}>{step}</li>
                         ))
                       ) : (
-                        <>
-                          <li>Deploy field assessment team to inspect drainage/road obstruction.</li>
-                          <li>Assess roadway water accumulation & evaluate vehicle accessibility.</li>
-                          <li>Identify lower-risk alternative access corridor.</li>
-                        </>
+                        <li className="italic text-slate-500">{activePlan ? 'This plan lists resource actions only (below).' : 'No plan generated yet.'}</li>
                       )}
                     </ul>
                   </div>
 
                   <div className="pt-2 border-t border-slate-200 flex gap-2">
-                    {!activePlan ? (
+                    {!activePlan && ['RESOLVED', 'CLOSED'].includes(selectedIncident.status) ? (
+                      <div className="text-[10px] text-slate-500 italic">Incident is {selectedIncident.status}; no new plan can be generated.</div>
+                    ) : !activePlan ? (
                       <button
                         onClick={handleGeneratePlan}
                         disabled={planLoading}
@@ -397,46 +413,37 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                   </div>
                 </div>
 
-                {/* Recommended Response Resource & Assignment */}
+                {/* Plan resource actions (backend). Dispatch is SIMULATED. */}
                 <div className="bg-white p-3 rounded border border-slate-200 space-y-2">
                   <div className="font-bold text-slate-900 text-xs flex justify-between">
-                    <span>RECOMMENDED RESPONSE UNIT:</span>
-                    <span className="text-emerald-700 font-bold text-[10px]">AVAILABLE (Hubballi Fire Station)</span>
+                    <span>PLAN RESOURCE ACTIONS</span>
+                    <span className="text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1 rounded">DISPATCH IS SIMULATED</span>
                   </div>
-                  <div className="text-[11px] text-slate-700">
-                    <b>Unit:</b> Rescue Team Alpha (RESCUE_TEAM)<br/>
-                    <b>Match Criteria:</b> Nearest available unit compatible with {selectedIncident.hazard_type}
-                  </div>
-                  
-                  {activePlan?.status === 'APPROVED' ? (
-                    teamAssigned ? (
-                      <div className="text-xs font-bold text-blue-800 bg-blue-50 px-3 py-1.5 rounded border border-blue-200">
-                        ✓ TEAM ASSIGNED TO INCIDENT — FIELD UNIT DISPATCHED
-                      </div>
-                    ) : (
-                      <button
-                        onClick={handleAssignTeam}
-                        className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1.5 rounded text-xs shadow-sm"
-                      >
-                        ASSIGN TEAM TO INCIDENT
-                      </button>
-                    )
-                  ) : (
+                  {!activePlan?.actions?.length ? (
                     <div className="text-[10px] text-slate-500 italic bg-slate-50 p-2 rounded">
-                      Response plan must be APPROVED before team assignment.
+                      {activePlan ? 'The plan matched no available resources.' : 'Generate a response plan to see matched resources.'}
                     </div>
+                  ) : activePlan.actions.map(a => (
+                    <div key={a.action_id} className="text-[11px] text-slate-700 border border-slate-200 rounded p-2 space-y-1">
+                      <div className="flex justify-between">
+                        <span><b>{a.resource_type}</b> ×{a.quantity} ({a.resource_id})</span>
+                        <span className="font-bold text-[10px]">{a.status}</span>
+                      </div>
+                      <div className="text-slate-500">{a.recommendation_reason} · match score {a.match_score}</div>
+                      {a.status === 'APPROVED' && (
+                        <button
+                          onClick={() => handleSimulatedDispatch(a)}
+                          disabled={!!dispatching}
+                          className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1 rounded text-[11px] disabled:opacity-50"
+                        >
+                          {dispatching === a.action_id ? 'RECORDING...' : 'RECORD SIMULATED DISPATCH'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {activePlan && activePlan.status !== 'APPROVED' && activePlan.actions?.length > 0 && (
+                    <div className="text-[10px] text-slate-500 italic">Approve the plan before recording a dispatch.</div>
                   )}
-                </div>
-              </div>
-
-              {/* Route & Corridor Intelligence Section */}
-              <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
-                <p className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider border-b border-slate-200 pb-1">ROUTE RISK & CORRIDOR INTELLIGENCE</p>
-                <div className="bg-white p-3 rounded border border-slate-200 text-[11px] space-y-1">
-                  <div><b>Current Route:</b> {selectedIncident.district} Access Corridor</div>
-                  <div><b>Route Risk:</b> <span className="text-amber-700 font-bold">{selectedIncident.risk_score > 80 ? 'CRITICAL (80/100)' : 'MODERATE (45/100)'}</span></div>
-                  <div><b>Distance / ETA:</b> 12.4 km | 24 mins</div>
-                  <div><b>Route Status:</b> <span className="text-emerald-700 font-bold">MONITORED</span></div>
                 </div>
               </div>
 
@@ -454,9 +461,11 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                       ESCALATE
                     </button>
                   )}
-                  <button onClick={() => handleAction(selectedIncident.incident_id, 'resolve')} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1.5 px-3 rounded text-xs">
-                    MARK RESOLVED
-                  </button>
+                  {selectedIncident.status !== 'RESOLVED' ? (
+                    <button onClick={() => handleAction(selectedIncident.incident_id, 'resolve')} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1.5 px-3 rounded text-xs">
+                      MARK RESOLVED
+                    </button>
+                  ) : <span className="text-[11px] text-slate-500 italic">Incident resolved.</span>}
                 </div>
               </div>
 

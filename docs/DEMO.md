@@ -1,9 +1,17 @@
-# AEGIS-COP — Demo Runbook (deterministic, offline)
+# AEGIS-COP: demo runbook (deterministic, offline)
 
-Rehearsed end to end three times on 2026-10-10 with identical results (headless
-Chrome against the commands below). Everything shown is a **prototype**: hazard
-scores are uncalibrated heuristics, drainage is synthetic, the "AI" evidence
-analysis is a mock, and coverage is Hubballi-Dharwad only.
+The steps below were run in headless Chrome against an offline backend on fresh
+databases (seed → mission → simulated report → reject → recompute → approve, plus the
+no-safe-route case). Each repeat produced the same routes and metrics as the table.
+The latest rehearsal date and results are in
+[project/IMPLEMENTATION_STATUS.md](project/IMPLEMENTATION_STATUS.md).
+
+**What is real and what is simulated:**
+- **Real:** routing, threat-zone logic, persistence and the audit trail all run on the
+  backend.
+- **Simulated:** the field and sensor reports. Every one is labelled **SIMULATED**.
+- **Heuristic:** hazard scores are uncalibrated.
+- **Coverage:** Hubballi-Dharwad only.
 
 ## 0. Prerequisites (once)
 
@@ -14,79 +22,145 @@ python3 -m venv .venv
 cd frontend && npm ci --ignore-scripts --no-audit --no-fund && cd ..
 ```
 
-Terrain needs a locally downloaded CartoDEM tile (see `data/terrain/README.md`); pass
-its path with `DEM_PATH`. Without it the demo still runs, but terrain is reported as
-unknown and hazard values differ from the numbers below.
+Optional terrain: put a CartoDEM tile on disk (see `data/terrain/README.md`) and add
+`DEM_PATH=/path/to/cdnd43d.tif` to the backend command. Without it the demo still runs.
+Terrain shows as unknown and the hazard numbers differ from the ones below; route
+geometry and the workflow are the same.
 
 ## 1. Start (three terminals, from the repo root)
 
-**Terminal 1 — backend, offline and on a fresh demo database**
+**Terminal 1: backend, offline, on a fresh demo database**
 
 ```bash
 cd backend
 export AEGIS_DEMO_DIR=$(mktemp -d /tmp/aegis-demo-XXXX)
 DATABASE_PATH=$AEGIS_DEMO_DIR/demo.db \
-DEM_PATH=/path/to/cdnd43d.tif \
 HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 NO_PROXY=localhost,127.0.0.1 \
 ../.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-The proxy variables point the backend's outbound calls (Open-Meteo, IMD) at a closed
-local port, so weather is deterministically *unavailable* and the demo never depends
-on venue internet. The browser's map tiles still need internet. Bind to `127.0.0.1`
-only: the API has no authentication.
+- **Why the proxy variables:** they send the backend's outbound calls (Open-Meteo, IMD)
+  to a closed local port. Weather is then reliably *unavailable* and the demo does not
+  depend on venue internet.
+- **Map tiles still need internet** in the browser.
+- **Bind to `127.0.0.1` only:** the API has no authentication.
 
-**Terminal 2 — frontend**
+**Terminal 2: frontend**
 
 ```bash
 cd frontend
 npm run dev            # http://localhost:5173
 ```
 
-**Terminal 3 — seed and warm up (wait for the backend first)**
+**Terminal 3: seed and warm up (wait until the backend answers `/api/health`)**
 
 ```bash
-.venv/bin/python scripts/demo/seed_demo.py          # ~5 s; refuses if the DB is not empty
+.venv/bin/python scripts/demo/seed_demo.py     # refuses to run if the database already has threats
 curl -s -o /dev/null -w "warm-up %{http_code} %{time_total}s\n" \
-  "http://127.0.0.1:8000/api/route?origin_lat=15.4589&origin_lon=75.0078&destination_lat=15.3647&destination_lon=75.1240&hazard_aware=true"
+  "http://127.0.0.1:8000/api/route?origin_lat=15.4030&origin_lon=75.0800&destination_lat=15.3647&destination_lon=75.1240"
 ```
 
-The warm-up (~40 s) fills the terrain cache so the obstruction step takes ~15–20 s
-instead of ~40 s. Then open http://localhost:5173 and keep the Overview tab.
+The seed creates:
+- 3 active **DEMO** threats and 1 closed one;
+- 4 demo field units;
+- 3 active **SIMULATED** evidence records and 1 archived one.
 
-## 2. Script (3–5 minutes)
+The warm-up loads the road graph (about 10 s cold), so **START MISSION** answers in under
+a second (0.36 s measured warm). Open http://localhost:5173 on the **Overview** tab.
 
-| Time | Action | What the audience sees |
-|---|---|---|
-| 0:00 | Overview | COP: 3 DEMO threats, units, evidence (SIMULATED), layer panel with counts from the backend, "Weather unavailable — hazard scores are partial" |
-| 0:30 | Planner → **Unkal - Vidyanagar → Select → PLAN** | Blue route; badge "AVOIDS ACTIVE THREAT ZONES" |
-| 0:45 | Terminal 3: `.venv/bin/python scripts/demo/add_road_closure.py` | Prints the new CRITICAL DEMO threat; route 18 → 21 nodes |
-| 0:55 | **Modify → PLAN** (zoom in 2 steps) | Route detours around the new red zone (+62 m) |
-| 1:15 | Right panel: **START ROUTE MONITORING** (~10 s) | Corridor Dharwad → Hubballi; "LOW (39.48), partial data — up to 99.48, confidence LIMITED" (uncertainty shown, not hidden) |
-| 1:35 | **OBSTRUCTION** (~15–20 s, narrate) | INVALIDATED, reason "CONTROLLED DEMO: simulated road obstruction…", proposal "18.6 km, ETA 51 min, Hazard LOW (34.75) — partial data" |
-| 2:00 | Close the planner (✕), zoom in | Green proposed route around the obstruction |
-| 2:15 | **APPROVE REPLACEMENT ROUTE** | Status REPLACED; COP route updated |
-| 2:30 | **RUN FLOOD RESPONSE** (~20 s) | Toast sequence; header "CONTROLLED SCENARIO … CRITICAL"; demo incidents appear |
-| 2:55 | **WEATHER & PREPAREDNESS** tab | "CONTROLLED DEMONSTRATION SCENARIO" badge, critical preparedness, hourly chart |
-| 3:20 | **OVERVIEW** → **CHECK ROUTE** (~15 s) | INVALIDATED: "Route intersects active CRITICAL threat zone(s)…", CRITICAL (94.75), confidence MEDIUM |
-| 3:40 | *(optional)* **FIND REPLACEMENT ROUTE** (up to ~45 s) | Honest "No safe alternative route avoids the blocking threat zones" |
-| 4:00 | Close | Verified vs. prototype (see below) |
+## 2. Click-by-click script (about 4 minutes)
 
-Talking points that are safe to claim: threat-aware routing with hard CRITICAL
-exclusion and explicit no-safe-route; persisted, audited route state; COP from
-canonical stores with demo/simulation labelling; explicit coverage and data-gap
-reporting; 126 automated offline tests. Do **not** claim validated flood prediction,
-real AI/CV, sensor fusion or regional portability.
+All values below come from the offline rehearsal with the DEM present.
 
-## 3. Fallbacks
+| # | Click | Expected result | What is happening technically |
+|---|---|---|---|
+| 1 | Nothing; Overview | **Data sources** strip (Backend CONNECTED, Road graph LOADED, Terrain AVAILABLE or UNAVAILABLE, Weather UNAVAILABLE, "Sensor / field feeds: NONE CONNECTED — simulated reports only", "Unit positions: MANUAL / SEEDED"). **Decision chain** with 7 empty steps and the hint "Start the mission". Map with the dashed **mission area** rectangle, 3 DEMO threat zones, unit and evidence markers | `GET /api/cop` every 10 s, `GET /api/system/status`. The rectangle is the road-graph extent from `GET /api/geo/coverage`. The chain is derived from backend records only |
+| 2 | **Active Mission → START MISSION** | Blue route with **Mission origin / Mission destination** markers. Panel: **ACTIVE**, 6.9 km · 17 min, "Hazard (heuristic): LOW (36.4) · partial data, up to 96.4 · confidence LIMITED". Log: "Mission route planned and monitoring started". Chain: ✓ MISSION ACTIVE | `GET /api/route` (threat-aware shortest path on the OSM graph), then `POST /api/route-monitor/register` (persisted). With weather unknown the score keeps an explicit upper bound instead of being re-weighted |
+| 3 | **SIMULATE SENSOR REPORT** | Toast "SIMULATED report → threat … (CRITICAL); mission route INVALIDATED". Route turns **red**; a new CRITICAL zone appears on it. **Threat assessment** card: SIMULATED, severity CRITICAL, Road Flooding, radius 75 m, confidence MEDIUM, source SIMULATED_REPORT, timestamp, evidence `EVD-…` (SENSOR SIM-WLS-07), "Source-declared confidence 80% (fixed by the simulation profile, not measured)", and the rule text. **WHY THE ROUTE IS INVALIDATED** box quotes the persisted reason. Chain: ✓ OBSERVATION RECEIVED (SIMULATED) → ✓ THREAT LINKED → ✕ ROUTE IMPACTED | `POST /api/simulation/field-report` creates evidence (`provenance.is_simulation=true`) and a linked threat at the route's midpoint. Confidence MEDIUM comes from the single-source rule (≥ 0.5 → MEDIUM, never HIGH). The route monitor reassesses: CRITICAL = hard exclusion (radius + 25 m buffer) → INVALIDATED, with the threat id in the reason |
+| 4 | Nothing (proposal appears in about 15 s) | **Dashed green** alternative on the map. Comparison at the top of Active Mission: distance 6.9 → 7.9 km, time 17 → 21 min, hazard 36.4 → 30.7, threat zones crossed 1 → 0. "Trade-off: +1.0 km, +4 min to cross 0 instead of 1 known threat zone(s)", the engine's rationale, and "not a guarantee that the road is safe". **APPROVE / REJECT** buttons. Chain: ✓ ALTERNATIVE PROPOSED, ● OPERATOR DECISION — awaiting | `POST /api/route-monitor/{id}/replacement/recommend`. The threat-aware engine excludes blocking zones; metrics come from the backend for both routes |
+| 5 | **REJECT** | Toast "Replacement route rejected by operator — route remains compromised". Proposal disappears; log "Operator REJECTED the alternative (Rejected by operator)". Chain: ! OPERATOR DECISION — REJECTED | `…/replacement/reject` persists the decision and reason. Status stays INVALIDATED |
+| 6 | **COMPUTE ALTERNATIVE ROUTE** | Same proposal again (deterministic) | New persisted recommendation |
+| 7 | **APPROVE** | Status **REPLACED**; the route on the map is now the green alternative (7.9 km · 21 min); log "Operator APPROVED the alternative" and "INVALIDATED → REPLACED"; **OPERATOR DECISION RECORDED** box. Chain: all 7 steps ✓ | `…/replacement/approve` swaps the monitored route's nodes and records the transition |
+| 8 | Reload the page (F5) | Same REPLACED mission and the full log | Everything shown is read back from SQLite |
+| 9 | **INCIDENTS** tab, select the SIMULATED threat | "Official Warning: None linked", "Severity score 80/100 (fixed per severity level, not a calibrated risk)", **LINKED EVIDENCE RECORDS** with the SIMULATED badge | `GET /api/evidence?threat_id=…` |
+| 10 | *(optional)* **GENERATE RESPONSE PLAN → APPROVE RESPONSE PLAN → RECORD SIMULATED DISPATCH** | Matched resources with distance-based match scores; after dispatch the action is DISPATCHED and the incident timeline gains "SIMULATED_DISPATCH" | Response-plan endpoints. The backend replies "SIMULATED RESPONSE. NO REAL RESOURCE HAS BEEN DISPATCHED." |
+| 11 | *(optional)* **FIELD OPERATIONS → SIMULATE FIELD REPORT: ROAD BLOCKED** | Second simulated report (field team, 40 m blockage) on the *new* route → mission INVALIDATED again; **COMPUTE ALTERNATIVE ROUTE** on Overview proposes 11.1 km · 34 min | Same pipeline with the `FIELD_TEAM_BLOCKAGE` profile |
+| 12 | *(optional)* **FIELD OPERATIONS → START TRIP**, then **COMPLETE** | First: "Field unit status recorded by backend: EN_ROUTE". Second: "Status change rejected: Invalid transition from EN_ROUTE to COMPLETED" | The backend state machine validates transitions; the UI only shows success after the backend accepts |
+
+**Safe to claim:**
+- threat-aware routing with hard CRITICAL exclusion, and an explicit no-safe-route
+  result;
+- simulated reports turned into canonical, linked evidence and threats with provenance;
+- persisted, audited route state and operator decisions;
+- a COP built from canonical stores, with demo and simulation labelling;
+- explicit coverage and data-gap reporting;
+- automated offline tests.
+
+**Do not claim:**
+- real sensors, YOLO/CV or sensor fusion;
+- real-time unit tracking;
+- calibrated flood prediction;
+- portability to other regions.
+
+### The "no safe route" case (optional, about 1 minute)
+
+The demo convoy always has a detour, so this case uses a second mission to a dead-end
+street whose only access road is blocked:
+
+```bash
+.venv/bin/python scripts/demo/no_safe_route_case.py
+```
+
+The script registers the mission (Hubballi city centre → a dead end, 4.3 km) and
+reports a SIMULATED CRITICAL washout on the access road, with linked SIMULATED
+evidence. The Active Mission panel follows the newest mission. Within 10 s it shows
+"Mission: (15.3647, 75.1240) → (15.3531, 75.0932)". Then:
+
+1. **CHECK ROUTE** → INVALIDATED; the reason names the washout threat.
+2. **COMPUTE ALTERNATIVE ROUTE** → "No safe alternative exists: every path to the
+   destination crosses a CRITICAL zone."
+   - Chain: ✕ ALTERNATIVE PROPOSED — No safe route exists.
+   - There is no APPROVE button and no invented route.
+
+Backend result: `NO_SAFE_AVAILABLE_ROUTE`; no recommendation is persisted. The same
+case is covered by
+`backend/tests/test_mission_workflow.py::test_no_safe_alternative_is_reported_honestly`.
+Because the result is not persisted, after a reload the chain shows "No proposal on
+record" until you recompute.
+
+Run this at the end of the demo, or on a fresh database: the convoy mission is no
+longer the newest one afterwards.
+
+## 3. Reset and repeat
+
+1. Stop terminal 1 (Ctrl+C).
+2. Create a new demo directory: `export AEGIS_DEMO_DIR=$(mktemp -d /tmp/aegis-demo-XXXX)`.
+3. Start the backend again (same command as before).
+4. Re-run the seed and the warm-up.
+5. Reload the browser.
+
+Nothing in the repository or in `data/aegis.db` is touched.
+
+## 4. Recovery
 
 | Problem | Do this |
 |---|---|
-| Obstruction / replacement takes > 60 s | Narrate, then continue with the planner road-closure step (fast); next time run the warm-up first |
-| No safe route / unexpected verdict | It is the real backend verdict: explain hard CRITICAL exclusion; continue with RUN FLOOD RESPONSE |
-| Backend crashed | Restart Terminal 1 with the same `DATABASE_PATH` (state persists), reload the page |
-| Need a clean slate | Stop backend, `export AEGIS_DEMO_DIR=$(mktemp -d /tmp/aegis-demo-XXXX)`, restart, re-seed, warm up |
-| No venue internet (blank map tiles) | Layers, panels and routes still render on a blank background; narrate, or use backup screenshots |
-| Frontend broken | Show the API at http://127.0.0.1:8000/docs (`/api/cop`, `/api/route`, `/api/geo/coverage`) |
-| DEM file missing | Start without `DEM_PATH`: everything runs; terrain shows as unknown and scores are partial |
-| Weather looks wrong in live mode | Use the offline start above (deterministic); the scenario button supplies labelled controlled weather |
+| Header shows **BACKEND UNREACHABLE** / panel shows **STALE**; chain steps show "unknown" | The backend stopped. Restart terminal 1 with the *same* `DATABASE_PATH` (state persists), then reload |
+| START MISSION is slow (> 10 s) | First route after start loads the graph; run the warm-up next time |
+| Proposal does not appear after the report | Click **COMPUTE ALTERNATIVE ROUTE** (if the automatic request failed, a toast shows the backend error) |
+| Seed refuses to run | The database is not empty: use a fresh `AEGIS_DEMO_DIR` (section 3) |
+| Blank map tiles (no venue internet) | Layers, routes and panels still render on a blank background |
+| Frontend broken | Show the API at http://127.0.0.1:8000/docs (`/api/cop`, `/api/route-monitor/{id}`) |
+| DEM missing | Start without `DEM_PATH`: everything runs; terrain is reported unknown |
+
+## 5. Limitations to mention if asked
+
+- **Reports:** there is no live sensor or field-app ingestion. Reports come from fixed
+  simulation profiles.
+- **Placement:** the report location is the midpoint of the current mission route,
+  chosen so the demo is reproducible.
+- **Hazard scores and penalties:** uncalibrated heuristics.
+- **Weather:** one point for the whole city (unavailable offline).
+- **Unit positions:** seeded, not tracked.
+
+See [LIMITATIONS.md](LIMITATIONS.md).

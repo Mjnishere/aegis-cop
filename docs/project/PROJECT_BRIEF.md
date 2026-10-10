@@ -57,5 +57,5 @@ Everything in AEGIS is currently at **prototype** level.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md), [DECISIONS_AND_ROADMAP.md](DECISIONS_AND_ROADMAP.md),
   [GEO_DATA_AND_VALIDATION.md](GEO_DATA_AND_VALIDATION.md)
-- Historical (pre-AEGIS, partly stale): `docs/FINAL_SYSTEM_AUDIT.md`,
-  `docs/JUDGE_DEMO_RUNBOOK.md`, `backend/phase5b_report.md`, `backend/phase5c_report.md`
+- Historical (pre-AEGIS, partly stale): `docs/archive/` (`FINAL_SYSTEM_AUDIT.md`,
+  `JUDGE_DEMO_RUNBOOK.md`, `phase5b_report.md`, `phase5c_report.md`)

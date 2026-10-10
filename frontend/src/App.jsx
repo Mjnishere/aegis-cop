@@ -149,6 +149,7 @@ function App() {
           scenarioStatus={scenarioStatus}
           toggleScenario={toggleScenario}
           onRunFloodDemo={handleRunFloodDemo}
+          refreshScenario={() => { fetchScenarioStatus(); checkWeather(); checkSystemStatus(); }}
           onOpenCitizenApp={() => setViewMode('citizen')}
         />
       )}

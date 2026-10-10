@@ -8,6 +8,7 @@ from .weather_adapter import weather_adapter
 from app.services.threat.zones import ThreatZoneIndex, active_threat_zones
 from app.services.hazard_scoring import summarize_risks
 from app.repositories.monitored_route_repository import monitored_route_repository
+from app.repositories.route_recommendation_repository import route_recommendation_repository
 
 _STATUS_RANK = {"ACTIVE": 0, "AT_RISK": 1, "INVALIDATED": 2}  # REPLACED/unknown rank as 0
 
@@ -225,11 +226,19 @@ class RouteMonitorService:
             "created_at": record["created_at"],
             "last_checked_at": record["last_checked_at"],
             "hazard_summary": record["current_hazard_summary"],
-            "environmental_mode": mode_label
+            "environmental_mode": mode_label,
+            # Mission history (all persisted): status transitions and replacement
+            # recommendations with their operator decisions.
+            "origin": record.get("origin"),
+            "destination": record.get("destination"),
+            "distance_m": record.get("distance_m"),
+            "estimated_time_s": record.get("estimated_time_s"),
+            "transitions": record.get("transitions") or [],
+            "recommendations": route_recommendation_repository.list_for_route(route_id),
         }
         if warning:
             res["warning"] = warning
-            
+
         return res
         
     def reassess_route(self, route_id: str) -> dict:

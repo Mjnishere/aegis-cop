@@ -1,6 +1,6 @@
 # AEGIS — Implementation Status
 
-Last updated: 2026-10-10 (Phase 4B, second execution pass). Update this file whenever
+Last updated: 2026-10-10 (AEGIS-COP mission workflow and decision chain; publication pass). Update this file whenever
 a capability's status changes, and record the evidence.
 
 ## Status labels
@@ -18,19 +18,51 @@ a capability's status changes, and record the evidence.
 "Verified" means *the code does what its tests assert in a test environment*. It
 does **not** mean validated against real-world outcomes; nothing in AEGIS is.
 
-## Current evidence (2026-10-10)
+## Current evidence (2026-10-10, final pre-publication run)
 
 | Check | Result |
 |---|---|
-| Environment | Python 3.12.3, `.venv`, `backend/requirements.lock.txt`, `pip check` clean; Node 20.19.5, `npm ci` from lock |
-| `cd backend && ../.venv/bin/python -m pytest` | **126 passed**, 0 failed (network blocked in-process, temp SQLite) |
-| Same with `OSM_GRAPH_PATH`/`DEM_PATH` absent | 65 passed, 60 skipped with explicit reasons |
-| `npm run lint` | Exit 0; 0 errors, 64 warnings (pre-existing unused vars/hook deps) |
+| Environment | Python 3.12.3, `.venv`, `backend/requirements.lock.txt`; Node 20.19.5, `npm ci` from lock |
+| `cd backend && ../.venv/bin/python -m pytest` with `DEM_PATH` set | **130 passed**, 0 failed (network blocked in-process, temp SQLite) |
+| Same without the DEM | 103 passed, 27 skipped with explicit reasons |
+| Same without the DEM and the OSM graph | 66 passed, 64 skipped |
+| `npm run lint` | Exit 0; 0 errors, 62 warnings (pre-existing unused vars/hook deps). Extra `oxlint -D no-undef` scan: only browser globals |
 | `npm run build` | Success |
-| Browser check (headless Chrome 154 via CDP, backend on temp DB with outbound calls blocked, Vite dev server) | All stages passed — see below |
+| Browser rehearsal of the mission workflow (headless Chrome via CDP, offline backend on a fresh temp DB, Vite dev server) | Passed — see "Mission workflow and decision chain" |
 | `data/aegis.db` after all runs | Not created |
 
-### Browser verification (2026-10-10)
+## Mission workflow and decision chain (2026-10-10) — Browser-verified
+
+Implemented: `services/threat/simulated_report.py`, `routes/simulation.py`
+(`/api/simulation/profiles`, `/api/simulation/field-report`), route-monitor history
+(`transitions`, `recommendations`), `MissionPanel.jsx`, `DecisionChain.jsx`
+(decision chain + data-source strip), `scripts/demo/no_safe_route_case.py`.
+Automated: `tests/test_mission_workflow.py` (4 tests: report → linked evidence + threat →
+INVALIDATED with threat id; reject then approve, consistent history and COP; unknown
+profile/route rejected; honest `NO_SAFE_AVAILABLE_ROUTE` with nothing persisted).
+
+Browser rehearsal on a fresh seeded database (backend outbound calls blocked, DEM present):
+
+| Step | Observed |
+|---|---|
+| Clean Overview | Data-source strip (backend CONNECTED, road graph LOADED, terrain AVAILABLE, weather UNAVAILABLE, feeds "NONE CONNECTED — simulated reports only", unit positions "MANUAL / SEEDED"); chain shows MISSION SETUP pending |
+| START MISSION | ACTIVE, 6.9 km · 17 min, "LOW (36.4) · partial data, up to 96.4 · confidence LIMITED" |
+| SIMULATE SENSOR REPORT | SIMULATED evidence (SENSOR SIM-WLS-07) + CRITICAL threat (confidence MEDIUM by the single-source rule); route INVALIDATED with the threat id; alternative auto-proposed: 7.9 km · 21 min, hazard 36.4 → 30.7, threat zones 1 → 0, "Trade-off: +1.0 km, +4 min" |
+| REJECT → COMPUTE → APPROVE | Chain: OPERATOR DECISION REJECTED → awaiting → APPROVED; route REPLACED; "OPERATOR DECISION RECORDED" |
+| Reload | Same chain (all 7 steps complete), log and map from SQLite |
+| Incident desk | "Official Warning: None linked", severity score labelled as fixed per level, linked SIMULATED evidence |
+| No-safe-route (`no_safe_route_case.py`) | CHECK ROUTE → INVALIDATED; COMPUTE → "No safe alternative exists…", chain "✕ ALTERNATIVE PROPOSED — No safe route exists", no approve button |
+| Backend stopped | BACKEND UNREACHABLE, STALE snapshot with time, source statuses "(last known)", chain steps "unknown" |
+| Backend restarted (same DB) | CONNECTED; mission state and chain restored |
+| Weather tab offline | Plain-language "Weather data unavailable — conditions are unknown" with the raw provider error only under "Technical detail" |
+| National tab offline | No placeholder regions; empty state names the feed mode (`NOT_CONFIGURED`) |
+
+Known gaps:
+- A `NO_SAFE_AVAILABLE_ROUTE` result is not persisted; after a reload the chain shows
+  "No proposal on record" until recomputed.
+- Tested at one viewport (≈1580×900); smaller laptop widths were not exercised.
+
+### Earlier browser verification (2026-10-10, COP layers)
 
 Fixtures were created through the API in a temporary database: 4 active threats
 (CRITICAL, HIGH, demo-labelled MODERATE, operator-reported CRITICAL obstruction) and
@@ -61,7 +93,11 @@ Fixed with a lock and publish-when-complete loading (same for the synthetic drai
 grid). After the fix the same burst returned 200 in ~6 s at 660 MB
 (`tests/test_graph_loading.py`).
 
-## Demo readiness (2026-10-10, sanitized repository)
+## Earlier demo readiness (2026-10-10, superseded UI)
+
+*Historical.* This walkthrough used the earlier route-monitoring panel (OBSTRUCTION /
+START ROUTE MONITORING buttons), which has since been replaced by the Active Mission
+panel and decision chain above. The backend fixes listed here still apply.
 
 Full offline walkthrough (`docs/DEMO.md`) rehearsed three times from fresh databases
 with identical results, in headless Chrome against `uvicorn` (127.0.0.1) and
@@ -114,6 +150,8 @@ Refresh after starting the scenario); the floating planner hides part of the map
 | Route exposure on full segment geometry | Verified | `test_threat_routing.py` |
 | Threat geo-context: spatially related routes only | Verified | `test_threat_routing.py` |
 | Single canonical threat representation | Partial | Threats and incidents share `incidents` via two services |
+| Simulated observation → linked evidence + threat → route reassessment | Verified + browser-verified (input is **Mock/demo**) | `test_mission_workflow.py`; profiles are fixed simulation inputs |
+| Threat confidence from evidence | Partial | Single-source rule only (≥ 0.5 → MEDIUM else LOW, never HIGH); no corroboration |
 
 ### Layer C — COP
 
@@ -121,6 +159,7 @@ Refresh after starting the scenario); the floating planner hides part of the map
 |---|---|---|
 | Snapshot/summary contract, canonical evidence, ARCHIVED excluded, no legacy double count | Verified | `test_cop_contract.py`, `test_cop_evidence.py` |
 | Frontend layers, toggles, counts, popups, stale/unavailable states | **Browser-verified** | See above |
+| Decision chain, data-source strip, mission panel (rationale, trade-off, approve/reject, decision record) | **Browser-verified** | Derived from the persisted route record and COP only; see "Mission workflow and decision chain" |
 | Demo/simulation labelling in COP | Verified + browser-verified | `is_demo`, `is_simulation`, SIMULATED badge |
 | Legacy field evidence in COP | Planned | ADR-010 (deferred, documented) |
 

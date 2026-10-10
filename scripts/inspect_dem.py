@@ -2,7 +2,7 @@ import os
 import sys
 
 def inspect_dem():
-    tif_path = r"D:\ResilienceRoute\data\terrain\cdnd43d_v3r1\cdnd43d.tif"
+    tif_path = os.environ.get("DEM_PATH", os.path.join("data", "terrain", "cdnd43d_v3r1", "cdnd43d.tif"))
     
     print("--- DEM INSPECTION SCRIPT ---")
     print(f"1. Exact file path: {tif_path}")

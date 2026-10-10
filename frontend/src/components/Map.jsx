@@ -98,12 +98,18 @@ export default function MapComponent({
   const [route, setRoute] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   
   const [routeMode, setRouteMode] = useState('FASTEST');
   const [forecastMinute, setForecastMinute] = useState(0);
   const [routeInfoDisplay, setRouteInfoDisplay] = useState(null);
   const [copVisible, setCopVisible] = useState({ threats: true, units: true, routes: true, evidence: true });
+  const [missionArea, setMissionArea] = useState(null);
+  useEffect(() => {
+    if (!copEnabled) return;
+    fetch(`${API_BASE_URL}/geo/coverage`).then(r => r.ok ? r.json() : null)
+      .then(m => setMissionArea(m?.road_graph?.bounds || null)).catch(() => setMissionArea(null));
+  }, [copEnabled]);
   const toggleCopLayer = (key) => setCopVisible(v => ({ ...v, [key]: !v[key] }));
 
   // Search state (Submit-driven low-frequency caching)
@@ -247,7 +253,7 @@ export default function MapComponent({
               <div className="flex items-center gap-2 truncate">
                 <span className="w-2 h-2 rounded-full bg-[#0B4F8A]"></span>
                 <span className="font-bold text-slate-800 truncate">
-                  {originLabel || 'Origin'} ➔ {destLabel || 'Destination'}
+                  {originLabel || destLabel ? `${originLabel || 'Origin'} ➔ ${destLabel || 'Destination'}` : 'Ad-hoc route planner'}
                 </span>
                 {routeInfoDisplay && (() => {
                   const badge = routeBadge(routeInfoDisplay);
@@ -270,14 +276,14 @@ export default function MapComponent({
                 onClick={() => setCollapsed(false)}
                 className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded text-[10px] border border-slate-300"
               >
-                Modify
+                {route ? 'Modify' : 'Open'}
               </button>
             </div>
           ) : (
             <div className="bg-white/95 border border-slate-300 backdrop-blur-md p-3.5 rounded-lg shadow-lg text-slate-900 w-80 space-y-3">
               <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-[#0B4F8A] flex items-center gap-1.5">
-                  <span>📍</span> FLOOD-SAFE ROUTE PLANNER
+                  <span>📍</span> THREAT-AWARE ROUTE PLANNER
                 </h3>
                 <button onClick={() => setCollapsed(true)} className="text-slate-400 hover:text-slate-700 font-bold text-xs">
                   ✕
@@ -379,7 +385,7 @@ export default function MapComponent({
                   disabled={!origin || !destination || loading}
                   className="flex-1 bg-[#0B4F8A] hover:bg-[#083B68] text-white py-1.5 rounded text-xs font-bold shadow-sm transition disabled:opacity-50"
                 >
-                  {loading ? 'CALCULATING...' : 'PLAN FLOOD-SAFE ROUTE'}
+                  {loading ? 'CALCULATING...' : 'PLAN THREAT-AWARE ROUTE'}
                 </button>
                 <button 
                   onClick={handleReset}
@@ -405,6 +411,7 @@ export default function MapComponent({
           <TileLayer
             attribution="NASA Global Imagery Browse Services (GIBS)"
             url="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg"
+            maxNativeZoom={9}
             opacity={0.8}
           />
         )}
@@ -429,7 +436,7 @@ export default function MapComponent({
         )}
 
         {/* Canonical COP layers (threats, field units, monitored routes, evidence) */}
-        {copEnabled && <COPLayers copData={copData} visible={copVisible} />}
+        {copEnabled && <COPLayers copData={copData} visible={copVisible} missionArea={missionArea} />}
 
         {/* Operational Waterlogging & Drainage Incidents Layer */}
         {showIncidents && !copEnabled && incidents.filter(inc => inc && typeof inc.latitude === 'number' && typeof inc.longitude === 'number' && !isNaN(inc.latitude) && !isNaN(inc.longitude)).map(inc => (
@@ -533,7 +540,7 @@ export default function MapComponent({
         {replacementRoute && Array.isArray(replacementRoute) && replacementRoute.length > 0 && (
           <Polyline
             positions={replacementRoute}
-            pathOptions={{ color: '#059669', weight: 7, opacity: 0.95 }}
+            pathOptions={{ color: '#059669', weight: 5, opacity: 0.9, dashArray: '10 8' }}
           />
         )}
 

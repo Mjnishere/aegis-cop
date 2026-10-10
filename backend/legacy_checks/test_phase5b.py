@@ -112,8 +112,8 @@ test("POST /api/flood/simulate (invalid param)", test_flood_simulate_invalid)
 section("5. INTERNAL LOGIC TESTS via service imports")
 # ==============================================================
 def test_internal_logic():
-    import sys
-    sys.path.append(r"d:\ResilienceRoute\backend")
+    import os, sys
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))  # backend/
     from app.services.flood.drainage_service import drainage_service
     from app.services.flood.runoff_service import runoff_service
     from app.services.flood.inundation_service import inundation_service

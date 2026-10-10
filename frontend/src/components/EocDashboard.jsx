@@ -6,6 +6,8 @@ import IncidentCenter from './IncidentCenter';
 import AlertCenter from './AlertCenter';
 import WeatherDashboard from './WeatherDashboard';
 import ThreatPanel from './ThreatPanel';
+import MissionPanel from './MissionPanel';
+import DecisionChain, { DataSourceStrip } from './DecisionChain';
 import { useCOP } from '../hooks/useCOP';
 import { API_BASE_URL } from '../config';
 
@@ -17,10 +19,11 @@ export default function EocDashboard({
   scenarioStatus,
   toggleScenario,
   onRunFloodDemo,
+  refreshScenario,
   onOpenCitizenApp
 }) {
   // Common Operating Picture (COP) Data Hook (10s polling refresh)
-  const { data: copData, loading: copLoading, error: copError } = useCOP(10000);
+  const { data: copData, loading: copLoading, error: copError, refresh: refreshCop } = useCOP(10000);
 
   // Navigation active tab: 'overview' | 'incidents' | 'field' | 'weather' | 'satellite' | 'national'
   const [activeTab, setActiveTab] = useState('overview');
@@ -40,19 +43,14 @@ export default function EocDashboard({
   const [eocStatus, setEocStatus] = useState(null);
   const [satLayers, setSatLayers] = useState([]);
 
-  // Route Monitoring & Replacement State
-  const [monitoredRoute, setMonitoredRoute] = useState(null);
-  const [monitorStatus, setMonitorStatus] = useState(null); // 'ACTIVE' | 'CHECKING' | 'INVALIDATED' | 'REPLACED'
-  const [replacementRec, setReplacementRec] = useState(null);
-  const [monitorReason, setMonitorReason] = useState(null); // reason text returned by the backend
+  // Mission (route monitoring) state lives in the backend; MissionPanel reads it from the COP.
+  const [proposedRoute, setProposedRoute] = useState(null);
+  const [missionRoute, setMissionRoute] = useState(null);
+  const [missionState, setMissionState] = useState(null);
 
   // Field Operations State Machine
-  const [fieldUnitStates, setFieldUnitStates] = useState({
-    'FU-001': 'EN_ROUTE',
-    'FU-002': 'AT_SCENE',
-    'FU-003': 'OPERATING'
-  });
-  const [reassessmentAlert, setReassessmentAlert] = useState(false);
+  // Overrides only after the backend confirmed a status change.
+  const [fieldUnitStates, setFieldUnitStates] = useState({});
 
   // Drawer & Toast State
   const [toastMessage, setToastMessage] = useState(null);
@@ -177,8 +175,18 @@ export default function EocDashboard({
   const handleRunFloodResponseDemo = async () => {
     try {
       setDemoStep('ACTIVATING_SCENARIO');
-      showToast("Activating controlled heavy rain scenario...", "info");
-      await fetch(`${API_BASE_URL}/scenario/activate`, { method: 'POST' });
+      if (scenarioStatus?.active) {
+        const off = await fetch(`${API_BASE_URL}/scenario/deactivate`, { method: 'POST' });
+        if (!off.ok) throw new Error(`scenario deactivation failed (HTTP ${off.status})`);
+        await fetchAllData();
+        refreshScenario?.();
+        setDemoStep(null);
+        showToast("Controlled rain scenario deactivated — weather inputs back to live/unavailable", "success");
+        return;
+      }
+      showToast("Activating controlled (SIMULATED) heavy-rain scenario...", "info");
+      const act = await fetch(`${API_BASE_URL}/scenario/activate`, { method: 'POST' });
+      if (!act.ok) throw new Error(`scenario activation failed (HTTP ${act.status})`);
 
       setDemoStep('REFRESHING_RISK');
       showToast("Updating regional flood risk scores...", "info");
@@ -189,7 +197,7 @@ export default function EocDashboard({
       await fetch(`${API_BASE_URL}/national/incidents/recommend`, { method: 'POST' }).catch(() => {});
 
       setDemoStep('PREPARING_RESPONSE');
-      showToast("Running 3-hour inundation nowcast model...", "info");
+      showToast("Running heuristic 3-hour flood nowcast (simulated inputs)...", "info");
       await fetch(`${API_BASE_URL}/flood/simulate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -198,7 +206,8 @@ export default function EocDashboard({
 
       setDemoStep('DEMO_READY');
       await fetchAllData();
-      showToast("✓ Controlled Flood Scenario Active — EOC Operations Ready", "success");
+      refreshScenario?.();
+      showToast("✓ Controlled SIMULATED rain scenario active — weather inputs are scenario values, not observations", "success");
 
       setTimeout(() => setDemoStep(null), 3000);
     } catch (e) {
@@ -208,164 +217,25 @@ export default function EocDashboard({
   };
 
   // ============================================================
-  // ROUTE MONITORING ENGINE
+  // MISSION ACTIONS (see MissionPanel for the main workflow)
   // ============================================================
-  // Demo corridor: Dharwad Central -> Hubballi centre. The route itself is computed
-  // by the backend; nothing below invents nodes, statuses or outcomes.
-  const MONITOR_ORIGIN = { lat: 15.4589, lon: 75.0078 };
-  const MONITOR_DESTINATION = { lat: 15.3647, lon: 75.1240 };
-
-  const registerMonitoredRoute = async () => {
-    const routeRes = await fetch(`${API_BASE_URL}/route?origin_lat=${MONITOR_ORIGIN.lat}&origin_lon=${MONITOR_ORIGIN.lon}&destination_lat=${MONITOR_DESTINATION.lat}&destination_lon=${MONITOR_DESTINATION.lon}`);
-    const route = await routeRes.json();
-    if (!routeRes.ok || route.status !== 'success') {
-      const msg = route?.message || route?.detail?.message || route?.detail || 'route calculation failed';
-      throw new Error(typeof msg === 'string' ? msg : 'route calculation failed');
-    }
-    const regRes = await fetch(`${API_BASE_URL}/route-monitor/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        origin: MONITOR_ORIGIN,
-        destination: MONITOR_DESTINATION,
-        route_nodes: route.route_nodes,
-        distance_m: route.distance_m,
-        estimated_time_s: route.estimated_time_s
-      })
-    });
-    if (!regRes.ok) throw new Error('route registration failed');
-    const reg = await regRes.json();
-    const registered = { ...reg, coordinates: route.route.coordinates };
-    setMonitoredRoute(registered);
-    setMonitorStatus(reg.monitor_status);
-    return registered;
-  };
-
-  const handleStartRouteMonitoring = async () => {
-    try {
-      const reg = await registerMonitoredRoute();
-      showToast(`Route registered for monitoring — status ${reg.monitor_status}. Use "Check now" to reassess.`, "success");
-    } catch (e) {
-      showToast("Failed to register route monitor: " + e.message, "error");
-    }
-  };
-
-  const handleCheckRouteNow = async () => {
-    if (!monitoredRoute?.route_id) return;
-    const previous = monitorStatus;
-    try {
-      setMonitorStatus('CHECKING');
-      const res = await fetch(`${API_BASE_URL}/route-monitor/${monitoredRoute.route_id}/check`, { method: 'POST' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setMonitorStatus(data.current_status);
-      if (data.reason) setMonitorReason(data.reason);
-      // A status change makes any earlier recommendation obsolete.
-      if (data.changed) setReplacementRec(null);
-      const tone = data.current_status === 'ACTIVE' ? 'success' : 'error';
-      const notes = [];
-      if (data.weather_state && data.weather_state !== 'AVAILABLE') notes.push(`weather ${data.weather_state.toLowerCase()}, confidence ${data.confidence}`);
-      if (data.status_retained_incomplete_data) notes.push('status kept: incomplete data cannot show improvement');
-      if (data.manual_invalidation_retained) notes.push('operator invalidation still in force');
-      showToast(`Route check: ${data.current_status}${data.reason ? ' — ' + data.reason : ''}${notes.length ? ' (' + notes.join('; ') + ')' : ''}`, tone);
-    } catch (e) {
-      setMonitorStatus(previous);
-      showToast("Route check failed: " + e.message, "error");
-    }
-  };
-
-  const describeReplacement = (rec) => {
-    switch (rec?.replacement_status) {
-      case 'RECOMMENDATION_READY': return { text: 'Replacement route proposed — awaiting operator approval', tone: 'info' };
-      case 'NO_SAFE_AVAILABLE_ROUTE': return { text: 'No safe alternative route avoids the blocking threat zones', tone: 'error' };
-      case 'NO_BETTER_ROUTE': return { text: 'No lower-risk alternative found: ' + (rec.decision?.reason || ''), tone: 'error' };
-      case 'NOT_REQUIRED': return { text: 'Replacement not required — route is not invalidated', tone: 'success' };
-      case 'NO_ROUTE': return { text: 'No alternative path exists in the road network', tone: 'error' };
-      default: return { text: 'Replacement request returned: ' + (rec?.replacement_status || 'unknown'), tone: 'error' };
-    }
-  };
-
-  const handleTriggerRouteReassessment = async () => {
-    try {
-      const route = monitoredRoute?.coordinates ? monitoredRoute : await registerMonitoredRoute();
-      const [midLon, midLat] = route.coordinates[Math.floor(route.coordinates.length / 2)];
-
-      // Controlled demonstration: a SIMULATED obstruction at the route midpoint.
-      // The backend records it as a CRITICAL threat with source CONTROLLED_DEMO.
-      const invRes = await fetch(`${API_BASE_URL}/route-monitor/${route.route_id}/invalidate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reason: 'CONTROLLED DEMO: simulated road obstruction at route midpoint',
-          actor: 'EOC_OPERATOR',
-          obstruction: { lat: midLat, lon: midLon, radius_m: 60, simulated: true }
-        })
-      });
-      if (!invRes.ok) throw new Error(`invalidation failed (HTTP ${invRes.status})`);
-      setMonitorStatus('INVALIDATED');
-      setMonitorReason('CONTROLLED DEMO: simulated road obstruction at route midpoint (recorded as a CRITICAL threat)');
-      setReassessmentAlert(true);
-
-      const recRes = await fetch(`${API_BASE_URL}/route-monitor/${route.route_id}/replacement/recommend`, { method: 'POST' });
-      const recData = await recRes.json();
-      if (!recRes.ok) throw new Error(recData.detail || `recommendation failed (HTTP ${recRes.status})`);
-      setReplacementRec(recData);
-      const outcome = describeReplacement(recData);
-      showToast(`⚠ ROUTE INVALIDATED (simulated obstruction). ${outcome.text}`, outcome.tone);
-    } catch (e) {
-      showToast("Route reassessment failed: " + e.message, "error");
-    }
-  };
-
-  const handleFindReplacementRoute = async () => {
-    let routeId = monitoredRoute?.route_id;
-    if (!routeId) {
-      await handleTriggerRouteReassessment();
+  const submitFieldTeamReport = async () => {
+    if (!missionRoute?.id) {
+      showToast("Start a mission on the Overview tab first (Active Mission panel).", "error");
       return;
     }
     try {
-      const res = await fetch(`${API_BASE_URL}/route-monitor/${routeId}/replacement/recommend`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/simulation/field-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route_id: missionRoute.id, profile: 'FIELD_TEAM_BLOCKAGE' })
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-      setReplacementRec(data);
-      const outcome = describeReplacement(data);
-      showToast(outcome.text, outcome.tone);
+      showToast(`SIMULATED field-team report → threat ${data.threat.incident_id}; mission route ${data.route_assessment?.current_status}. Review it on the Overview tab.`, "info");
+      refreshCop();
     } catch (e) {
-      showToast("Failed to find replacement route: " + e.message, "error");
-    }
-  };
-
-  const handleApproveReplacementRoute = async () => {
-    const routeId = monitoredRoute?.route_id;
-    const recId = replacementRec?.recommendation_id;
-    if (!routeId || !recId) {
-      showToast("Missing recommendation ID for replacement approval", "error");
-      return;
-    }
-    try {
-      const res = await fetch(`${API_BASE_URL}/route-monitor/${routeId}/replacement/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recommendation_id: recId, approved: true })
-      });
-      if (res.ok) {
-        setMonitorStatus('REPLACED');
-        setReassessmentAlert(false);
-
-        if (replacementRec?.candidate_route?.coordinates) {
-          const newCoords = replacementRec.candidate_route.coordinates.map(c => [c[1], c[0]]);
-          setRouteInfo(prev => ({ ...(prev || {}), coordinates: newCoords, distance_m: replacementRec.candidate_route.distance_m }));
-        }
-
-        // The recommendation is consumed; the approved route is now the monitored route (COP layer).
-        setReplacementRec(null);
-        showToast("✓ Replacement Route Approved & Activated by EOC Operator", "success");
-      } else {
-        const errData = await res.json();
-        showToast("Approval failed: " + (errData.detail || "Error approving route"), "error");
-      }
-    } catch (e) {
-      showToast("Failed to approve replacement route: " + e.message, "error");
+      showToast("Simulated field report failed: " + e.message, "error");
     }
   };
 
@@ -484,62 +354,29 @@ export default function EocDashboard({
   }
 
   const handleUpdateUnitState = async (unitId, nextState) => {
-    setFieldUnitStates(prev => ({ ...prev, [unitId]: nextState }));
-    setFieldUnits(prev => prev.map(u => u.field_unit_id === unitId ? { ...u, status: nextState } : u));
     try {
-      await fetch(`${API_BASE_URL}/national/field-units/${unitId}/status`, {
+      const res = await fetch(`${API_BASE_URL}/national/field-units/${unitId}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_status: nextState, actor: 'EOC Operator', role: 'EOC_OPERATOR' })
       });
-    } catch (e) {}
-    showToast(`✓ Field Unit status updated to ${nextState}`, "info");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+      setFieldUnitStates(prev => ({ ...prev, [unitId]: nextState }));
+      setFieldUnits(prev => prev.map(u => u.field_unit_id === unitId ? { ...u, status: nextState } : u));
+      showToast(`✓ Field unit status recorded by backend: ${nextState}`, "success");
+      return true;
+    } catch (e) {
+      showToast(`Status change rejected: ${e.message}`, "error");
+      return false;
+    }
   };
 
-  const activeIncidentsCount = incidents.filter(i => i.status !== 'RESOLVED').length;
+  const activeIncidents = incidents.filter(i => !['RESOLVED', 'CLOSED'].includes(i.status));
   const availableResourcesCount = resources.filter(r => r.status === 'AVAILABLE' || r.status === 'PARTIALLY_AVAILABLE').length;
 
   // State for Start Operation Modal
   const [activeOperationModal, setActiveOperationModal] = useState(null);
-
-  // Smooth live vehicle movement animation hook for dispatched teams
-  useEffect(() => {
-    const moveInterval = setInterval(() => {
-      setFieldUnits(prevUnits => {
-        return prevUnits.map(unit => {
-          const st = fieldUnitStates[unit.field_unit_id] || unit.status;
-          if (st === 'EN_ROUTE' && selectedIncident?.latitude && selectedIncident?.longitude) {
-            const targetLat = selectedIncident.latitude;
-            const targetLng = selectedIncident.longitude;
-            const currLat = unit.latitude || 15.3647;
-            const currLng = unit.longitude || 75.1240;
-
-            const dLat = targetLat - currLat;
-            const dLng = targetLng - currLng;
-            const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-
-            if (dist < 0.002) {
-              // Arrived at destination
-              setFieldUnitStates(prev => ({ ...prev, [unit.field_unit_id]: 'AT_SCENE' }));
-              showToast(`📍 ${unit.name} HAS ARRIVED AT SCENE (${selectedIncident.title})`, "success");
-              return { ...unit, latitude: targetLat, longitude: targetLng, status: 'AT_SCENE' };
-            } else {
-              // Move 15% closer to target along vector
-              return {
-                ...unit,
-                latitude: currLat + dLat * 0.15,
-                longitude: currLng + dLng * 0.15,
-                target_incident_title: selectedIncident.title
-              };
-            }
-          }
-          return unit;
-        });
-      });
-    }, 2500);
-
-    return () => clearInterval(moveInterval);
-  }, [fieldUnitStates, selectedIncident]);
 
   return (
     <div className="flex h-screen bg-[#F5F7FA] text-slate-900 font-sans overflow-hidden">
@@ -567,8 +404,7 @@ export default function EocDashboard({
             </div>
 
             <div className="bg-blue-50/70 border border-blue-200 p-3 rounded space-y-1.5 text-slate-800">
-              <div><b>TARGET CASE:</b> <span className="font-bold text-[#0B4F8A]">{selectedIncident?.title || 'Dharwad Central Drainage Overflow'}</span></div>
-              <div><b>LOCATION:</b> {selectedIncident?.district || 'Dharwad Central'}, {selectedIncident?.state || 'Karnataka'}</div>
+              <div><b>SELECTED INCIDENT:</b> <span className="font-bold text-[#0B4F8A]">{selectedIncident?.title || 'none selected'}</span></div>
               <div><b>STATUS:</b> <span className="font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded border border-purple-200">OPERATING</span></div>
               <div><b>ASSIGNED TEAM:</b> {activeOperationModal.name} ({activeOperationModal.unit_type})</div>
             </div>
@@ -576,14 +412,14 @@ export default function EocDashboard({
             <div className="space-y-1.5">
               <div className="font-bold uppercase text-[10px] text-slate-500">CURRENT OPERATIONAL TASK</div>
               <p className="bg-slate-50 p-2.5 rounded border border-slate-200 text-slate-700 font-medium">
-                Inspect drainage outlet and clear roadway water accumulation. Collect visual field evidence and assess vehicle access safety.
+                Status OPERATING recorded by the backend. Task details are not tracked in this prototype.
               </p>
             </div>
 
             <div className="space-y-1.5">
               <div className="font-bold uppercase text-[10px] text-slate-500">FIELD REPORTS & EVIDENCE</div>
-              <div className="bg-emerald-50 text-emerald-800 p-2 rounded border border-emerald-200 text-[11px]">
-                ✓ Initial visual evidence verified by field unit. PWD Drainage equipment pre-positioned.
+              <div className="bg-slate-50 text-slate-700 p-2 rounded border border-slate-200 text-[11px]">
+                No field telemetry or evidence uploads are connected; evidence appears in the COP only when recorded through the evidence API.
               </div>
             </div>
 
@@ -652,9 +488,9 @@ export default function EocDashboard({
               <div className="flex items-center gap-2.5">
                 <span>🚨</span> INCIDENTS
               </div>
-              {activeIncidentsCount > 0 && (
+              {activeIncidents.length > 0 && (
                 <span className="text-[9px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded-full">
-                  {activeIncidentsCount}
+                  {activeIncidents.length}
                 </span>
               )}
             </button>
@@ -712,7 +548,9 @@ export default function EocDashboard({
         {/* Bottom System Provenance */}
         <div className="p-3 border-t border-[#D9E0E8] bg-slate-50 text-[10px] text-slate-600 space-y-1">
           <div className="font-bold text-slate-800">HUBBALLI–DHARWAD EOC</div>
-          <div className="text-emerald-700 font-bold">STATUS: ● OPERATIONAL</div>
+          <div className={`font-bold ${copError ? 'text-red-700' : copData ? 'text-emerald-700' : 'text-slate-500'}`}>
+            BACKEND: ● {copError ? 'UNREACHABLE' : copData ? 'CONNECTED' : 'CONNECTING'}
+          </div>
           <div className="text-slate-500 font-mono">TIME: {lastUpdatedTime}</div>
         </div>
       </aside>
@@ -729,7 +567,7 @@ export default function EocDashboard({
               AEGIS-COP — TACTICAL EDGE COMMON OPERATING PICTURE
             </h2>
             <p className="text-[11px] text-slate-500 font-medium">
-              Real-Time Flood Assessment, Route Intelligence & Resource Command
+              Observation → evidence → threat → route impact → explainable recommendation → human decision · Hubballi-Dharwad prototype
             </p>
           </div>
 
@@ -760,13 +598,14 @@ export default function EocDashboard({
                 </>
               ) : (
                 <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800" title={weatherForecast?.error || 'No weather response'}>
-                  WEATHER UNAVAILABLE — conditions unknown
+                  WEATHER UNAVAILABLE
                 </span>
               )}
             </button>
 
-            <div className="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1.5 rounded border border-emerald-200">
-              ● OPERATIONAL
+            <div className={`font-bold px-2.5 py-1.5 rounded border ${copError ? 'text-red-700 bg-red-50 border-red-200' : copData ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-slate-600 bg-slate-50 border-slate-200'}`}
+              title="Based on the last COP refresh (every 10 s)">
+              ● {copError ? 'BACKEND UNREACHABLE' : copData ? 'BACKEND CONNECTED' : 'CONNECTING'}
             </div>
 
             {/* Run Flood Response Demo Button */}
@@ -782,7 +621,7 @@ export default function EocDashboard({
                 {demoStep === 'ASSESSING_INCIDENTS' && 'ASSESSING INCIDENTS...'}
                 {demoStep === 'PREPARING_RESPONSE' && 'PREPARING RESPONSE...'}
                 {demoStep === 'DEMO_READY' && '✓ DEMO READY'}
-                {!demoStep && (scenarioStatus?.active ? 'RESET FLOOD DEMO' : 'RUN FLOOD RESPONSE')}
+                {!demoStep && (scenarioStatus?.active ? 'END RAIN SCENARIO' : 'RAIN SCENARIO (SIMULATED)')}
               </span>
             </button>
           </div>
@@ -807,49 +646,15 @@ export default function EocDashboard({
         {activeTab === 'overview' && (
           <div className="flex-1 flex flex-col overflow-hidden bg-[#F5F7FA] p-4 gap-3">
             
-            {/* Dynamic KPI Strip derived from actual application state */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 shrink-0">
-              <div className="bg-white border border-[#D9E0E8] rounded-md p-2.5 shadow-sm">
-                <div className="text-[9px] font-bold uppercase text-slate-500">ACTIVE INCIDENTS</div>
-                <div className="text-lg font-extrabold text-red-700 font-mono mt-0.5">{incidents.length}</div>
-              </div>
-              <div className="bg-white border border-[#D9E0E8] rounded-md p-2.5 shadow-sm">
-                <div className="text-[9px] font-bold uppercase text-slate-500">CRITICAL AREAS</div>
-                <div className="text-lg font-extrabold text-red-800 font-mono mt-0.5">
-                  {incidents.filter(i => i.severity === 'CRITICAL').length} Sectors
-                </div>
-              </div>
-              <div className="bg-white border border-[#D9E0E8] rounded-md p-2.5 shadow-sm">
-                <div className="text-[9px] font-bold uppercase text-slate-500">DRAINAGE ISSUES</div>
-                <div className="text-lg font-extrabold text-amber-700 font-mono mt-0.5">
-                  {incidents.filter(i => i.hazard_type?.toLowerCase().includes('drain')).length} Locations
-                </div>
-              </div>
-              <div className="bg-white border border-[#D9E0E8] rounded-md p-2.5 shadow-sm">
-                <div className="text-[9px] font-bold uppercase text-slate-500">TEAMS EN ROUTE</div>
-                <div className="text-lg font-extrabold text-[#0B4F8A] font-mono mt-0.5">
-                  {fieldUnits.filter(u => (fieldUnitStates[u.field_unit_id] || u.status) === 'EN_ROUTE').length} Units
-                </div>
-              </div>
-              <div className="bg-white border border-[#D9E0E8] rounded-md p-2.5 shadow-sm">
-                <div className="text-[9px] font-bold uppercase text-slate-500">AT SCENE</div>
-                <div className="text-lg font-extrabold text-purple-700 font-mono mt-0.5">
-                  {fieldUnits.filter(u => ['AT_SCENE', 'OPERATING'].includes(fieldUnitStates[u.field_unit_id] || u.status)).length} Teams
-                </div>
-              </div>
-              <div className="bg-white border border-[#D9E0E8] rounded-md p-2.5 shadow-sm">
-                <div className="text-[9px] font-bold uppercase text-slate-500">COMPLETED</div>
-                <div className="text-lg font-extrabold text-emerald-700 font-mono mt-0.5">
-                  {fieldUnits.filter(u => (fieldUnitStates[u.field_unit_id] || u.status) === 'COMPLETED').length} Done
-                </div>
-              </div>
-            </div>
+            {/* Data-source availability and the mission decision chain (backend state only) */}
+            <DataSourceStrip copData={copData} copError={copError} systemStatus={systemStatus} />
+            <DecisionChain mission={missionState} copData={copData} />
 
             {/* Main Area: Priority Queue (left) | Map (center) | Active Response Teams & Route Monitoring (right) */}
             <div className="flex-1 flex gap-3 overflow-hidden">
               
               {/* Left COP Threat Intelligence Panel */}
-              <div className="w-64 shrink-0 overflow-hidden">
+              <div className="w-64 shrink-0 overflow-hidden flex flex-col gap-2">
                 {copLoading ? (
                   <div className="p-4 bg-white border border-[#D9E0E8] rounded-md text-xs font-bold text-slate-500 italic">
                     Loading COP...
@@ -865,6 +670,7 @@ export default function EocDashboard({
                       STALE — last refresh failed ({copError}). Showing snapshot from {new Date(copData.generated_at).toLocaleTimeString()}.
                     </div>
                   )}
+                  <div className="flex-1 min-h-0">
                   <ThreatPanel 
                     threats={copData?.threats || []} 
                     onSelectThreat={(t) => handleSelectIncident({
@@ -879,6 +685,8 @@ export default function EocDashboard({
                     })} 
                     selectedThreatId={selectedIncident?.incident_id} 
                   />
+                  </div>
+                  <SelectedThreatEvidence copData={copData} threatId={selectedIncident?.incident_id} />
                   </>
                 )}
               </div>
@@ -899,35 +707,38 @@ export default function EocDashboard({
                   copData={copData}
                   copError={copError}
                   copEnabled={true}
-                  activeDispatch={selectedIncident && typeof fieldUnits[0]?.latitude === 'number' && typeof fieldUnits[0]?.longitude === 'number' ? {
-                    unitLat: fieldUnits[0].latitude,
-                    unitLng: fieldUnits[0].longitude,
-                    incLat: selectedIncident.latitude,
-                    incLng: selectedIncident.longitude
-                  } : null}
-                  replacementRoute={replacementRec?.replacement_status === 'RECOMMENDATION_READY' && replacementRec?.candidate_route?.coordinates ? replacementRec.candidate_route.coordinates.map(c => [c[1], c[0]]) : null}
-                  monitorStatus={monitorStatus}
+                  replacementRoute={proposedRoute}
                 />
               </div>
 
-              {/* Right Sidebar: Dispatched Live Vehicles & Route Monitoring (No approval buttons) */}
-              <div className="w-80 bg-white border border-[#D9E0E8] rounded-md p-3 flex flex-col gap-3 shrink-0 overflow-y-auto shadow-sm text-xs">
-                
+              {/* Right Sidebar: active mission (primary) and field units */}
+              <div className="w-96 bg-white border border-[#D9E0E8] rounded-md p-3 flex flex-col gap-3 shrink-0 overflow-y-auto shadow-sm text-xs">
+
+                {/* Active mission: threat report -> route compromise -> alternative -> operator decision */}
+                <MissionPanel
+                  copData={copData}
+                  refreshCop={refreshCop}
+                  showToast={showToast}
+                  onProposedRoute={setProposedRoute}
+                  onMissionChange={setMissionRoute}
+                  onStateChange={setMissionState}
+                />
+
                 {/* Live Dispatched Response Teams Panel */}
                 <div className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
                   <div className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider border-b border-slate-200 pb-1 flex justify-between items-center">
-                    <span>LIVE DISPATCHED TEAMS</span>
+                    <span>FIELD UNITS{fieldUnits.some(u => u.demo) ? ' (DEMO ROSTER)' : ''}</span>
                     <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">
-                      {fieldUnits.filter(u => ['EN_ROUTE', 'AT_SCENE', 'OPERATING'].includes(fieldUnitStates[u.field_unit_id] || u.status)).length} ACTIVE
+                      {fieldUnits.filter(u => ['EN_ROUTE', 'AT_SCENE', 'OPERATING'].includes(fieldUnitStates[u.field_unit_id] || u.status)).length} EN ROUTE / ON SCENE
                     </span>
                   </div>
 
                   {fieldUnits.length === 0 ? (
-                    <div className="text-slate-400 italic text-[11px]">No response teams dispatched.</div>
+                    <div className="text-slate-400 italic text-[11px]">No field units registered.</div>
                   ) : (
                     <div className="space-y-2">
                       {fieldUnits.map(fu => {
-                        const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'ASSIGNED';
+                        const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'UNKNOWN';
                         return (
                           <div key={fu.field_unit_id} className="bg-white p-2.5 rounded border border-slate-200 space-y-1">
                             <div className="flex justify-between items-center">
@@ -944,14 +755,8 @@ export default function EocDashboard({
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-600">
-                              <b>Target Destination:</b> {selectedIncident?.title || fu.city || 'Hubballi Sector'}
+                              <b>Linked incident:</b> {incidents.find(i => i.incident_id === fu.incident_id)?.title || 'none'} · {fu.city || fu.district || 'location unknown'}
                             </div>
-                            {st === 'EN_ROUTE' && (
-                              <div className="text-[10px] text-[#0B4F8A] font-mono font-bold flex justify-between">
-                                <span>ETA: 6 mins</span>
-                                <span>Distance: 2.1 km</span>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -959,92 +764,6 @@ export default function EocDashboard({
                   )}
                 </div>
 
-                {/* Route Monitoring & Reassessment Panel */}
-                <div className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
-                  <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                    <span className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider">ROUTE MONITORING</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-                      monitorStatus === 'INVALIDATED' ? 'bg-red-100 text-red-800 border border-red-300' :
-                      monitorStatus === 'REPLACED' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                    }`}>
-                      {monitorStatus || 'INACTIVE'}
-                    </span>
-                  </div>
-
-                  {!monitoredRoute ? (
-                    <button
-                      onClick={handleStartRouteMonitoring}
-                      className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1.5 rounded text-xs transition"
-                    >
-                      START ROUTE MONITORING
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-slate-700 text-[11px]">
-                        <b>Corridor:</b> Dharwad ➔ Hubballi Center<br/>
-                        <b>Hazard (heuristic):</b> {(() => {
-                          const hs = copData?.monitored_routes?.find(r => r.id === monitoredRoute.route_id)?.hazard_summary;
-                          if (!hs || hs.overall_level === undefined) return 'awaiting COP refresh';
-                          const partial = hs.score_basis && hs.score_basis !== 'COMPLETE';
-                          return `${hs.overall_level} (${hs.overall_score})${partial ? `, partial data — up to ${hs.score_upper_bound}` : ''}, confidence ${hs.confidence || 'n/a'}`;
-                        })()}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleCheckRouteNow}
-                          className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-1 rounded text-[10px]"
-                        >
-                          CHECK ROUTE
-                        </button>
-                        <button
-                          onClick={handleTriggerRouteReassessment}
-                          className="flex-1 bg-red-700 hover:bg-red-800 text-white font-bold py-1 rounded text-[10px]"
-                        >
-                          OBSTRUCTION
-                        </button>
-                      </div>
-
-                      {/* Reassessment Workflow */}
-                      {monitorStatus === 'INVALIDATED' && (
-                        <div className="bg-red-50 border border-red-200 p-2 rounded text-red-900 text-[11px] space-y-1.5">
-                          <div className="font-bold text-red-800">⚠ ROUTE INVALIDATED</div>
-                          <div>{monitorReason || 'Reason not available — use CHECK ROUTE.'}</div>
-                          
-                          {!replacementRec || (replacementRec.replacement_status !== 'RECOMMENDATION_READY' && !replacementRec.recommendation_id) ? (
-                            <div className="space-y-1">
-                            {replacementRec && (
-                              <div className="font-bold text-red-800">{describeReplacement(replacementRec).text}</div>
-                            )}
-                            <button
-                              onClick={handleFindReplacementRoute}
-                              className="w-full bg-red-700 hover:bg-red-800 text-white font-bold py-1 rounded text-xs"
-                            >
-                              {replacementRec ? 'RETRY REPLACEMENT SEARCH' : 'FIND REPLACEMENT ROUTE'}
-                            </button>
-                            </div>
-                          ) : (
-                            <div className="space-y-1 pt-1 border-t border-red-200">
-                              <div className="font-bold text-emerald-800">PROPOSED REPLACEMENT ROUTE:</div>
-                              <div>
-                                {(replacementRec.candidate_route.distance_m / 1000).toFixed(1)} km | ETA {Math.round(replacementRec.candidate_route.travel_time_s / 60)} min
-                                {' '}| Hazard {replacementRec.candidate_route.hazard_level} ({replacementRec.candidate_route.hazard_score})
-                                {replacementRec.candidate_route.score_basis && replacementRec.candidate_route.score_basis !== 'COMPLETE' && ' — partial data'}
-                              </div>
-                              <div className="text-[10px] text-slate-600">{replacementRec.decision?.reason}</div>
-                              <button
-                                onClick={handleApproveReplacementRoute}
-                                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1.5 rounded text-xs"
-                              >
-                                APPROVE REPLACEMENT ROUTE
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
 
               </div>
             </div>
@@ -1087,20 +806,21 @@ export default function EocDashboard({
             <div className="bg-white border border-[#D9E0E8] p-4 rounded-md flex justify-between items-center shadow-sm">
               <div>
                 <h2 className="text-base font-extrabold text-[#0B4F8A] uppercase">FIELD OPERATIONS COMMAND & AUDIT DESK</h2>
-                <div className="text-slate-600 font-bold text-xs mt-0.5">ACTIVE MISSIONS, COMPLETED WORK & CHRONOLOGICAL OPERATIONAL AUDIT LOG</div>
+                <div className="text-slate-600 font-bold text-xs mt-0.5">FIELD UNIT STATUS (BACKEND-VALIDATED TRANSITIONS) & INCIDENT TIMELINE</div>
               </div>
               <button
-                onClick={handleTriggerRouteReassessment}
+                onClick={submitFieldTeamReport}
+                title="Creates a SIMULATED field-team report on the active mission route"
                 className="bg-red-700 hover:bg-red-800 text-white font-bold text-xs px-3.5 py-2 rounded shadow-sm"
               >
-                SUBMIT FIELD REPORT: ROAD OBSTRUCTED
+                SIMULATE FIELD REPORT: ROAD BLOCKED
               </button>
             </div>
 
             {/* Active Response Units Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {fieldUnits.map(fu => {
-                const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'ASSIGNED';
+                const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'UNKNOWN';
                 return (
                   <div key={fu.field_unit_id} className="bg-white border border-[#D9E0E8] p-4 rounded-md space-y-2.5 shadow-sm">
                     <div className="flex justify-between items-center border-b border-[#D9E0E8] pb-2">
@@ -1115,7 +835,7 @@ export default function EocDashboard({
                       </span>
                     </div>
                     <div className="text-slate-700"><b>Type:</b> {fu.unit_type}</div>
-                    <div className="text-slate-700"><b>Assigned Incident:</b> {selectedIncident?.title || 'Dharwad Central Drainage Overflow'}</div>
+                    <div className="text-slate-700"><b>Linked incident:</b> {incidents.find(i => i.incident_id === fu.incident_id)?.title || 'none'}</div>
                     <div className="text-slate-700"><b>Current Location:</b> {fu.city || fu.district}</div>
 
                     {/* Unit State Machine Action Buttons */}
@@ -1161,7 +881,7 @@ export default function EocDashboard({
                       <th className="p-2">SEVERITY</th>
                       <th className="p-2">STATUS</th>
                       <th className="p-2">ASSIGNED TEAM</th>
-                      <th className="p-2">FIELD REPORT</th>
+                      <th className="p-2">EVIDENCE</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1178,8 +898,8 @@ export default function EocDashboard({
                           </span>
                         </td>
                         <td className="p-2 font-bold text-slate-800">{inc.status}</td>
-                        <td className="p-2 text-slate-700">{fieldUnits[idx % fieldUnits.length]?.name || 'Rescue Team Alpha'}</td>
-                        <td className="p-2 font-mono text-[10px] text-emerald-700 font-bold">VERIFIED EVIDENCE</td>
+                        <td className="p-2 text-slate-700">{fieldUnits.filter(u => u.incident_id === inc.incident_id).map(u => u.name).join(', ') || '—'}</td>
+                        <td className="p-2 font-mono text-[10px] text-slate-700">{(() => { const n = (copData?.evidence || []).filter(e => e.threat_id === inc.incident_id).length; return n ? `${n} evidence record${n > 1 ? 's' : ''}` : 'none'; })()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1187,39 +907,17 @@ export default function EocDashboard({
               </div>
             </div>
 
-            {/* Comprehensive Chronological Operational Audit Log */}
+            {/* Real timeline of the selected incident (backend record) */}
             <div className="bg-white border border-[#D9E0E8] rounded-md p-4 space-y-3 shadow-sm">
               <div className="font-extrabold text-xs text-[#0B4F8A] uppercase tracking-wider border-b border-[#D9E0E8] pb-2">
-                CHRONOLOGICAL OPERATIONAL AUDIT LOG
+                INCIDENT TIMELINE {selectedIncidentDetail?.title ? `— ${selectedIncidentDetail.title}` : ''}
               </div>
               <div className="space-y-1.5 max-h-48 overflow-y-auto font-mono text-[11px] pr-1">
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:42 IST</span> — <span className="font-bold text-red-700">INCIDENT_DETECTED</span>: Gokul Road Waterlogging risk score reached 88/100 (CRITICAL).
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:43 IST</span> — <span className="font-bold text-[#0B4F8A]">INCIDENT_ACKNOWLEDGED</span>: EOC Operator acknowledged incident Gokul Road.
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:44 IST</span> — <span className="font-bold text-[#0B4F8A]">RESPONSE_PLAN_CREATED</span>: Response plan PLAN-7F8A2D recommended.
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:45 IST</span> — <span className="font-bold text-emerald-700">RESPONSE_PLAN_APPROVED</span>: EOC Operator approved response plan and reserved Rescue Team Alpha.
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:46 IST</span> — <span className="font-bold text-blue-700">TEAM_ASSIGNED</span>: Rescue Team Alpha assigned to Gokul Road Waterlogging.
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:47 IST</span> — <span className="font-bold text-blue-700">SIMULATED_DISPATCH</span>: Simulated dispatch for Rescue Team Alpha (EN_ROUTE).
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:51 IST</span> — <span className="font-bold text-purple-700">FIELD_STATUS_CHANGED</span>: Rescue Team Alpha arrived at scene (AT_SCENE).
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:54 IST</span> — <span className="font-bold text-amber-700">FIELD_REPORT_SUBMITTED</span>: Road obstructed by culvert overflow reported by field unit.
-                </div>
-                <div className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                  <span className="text-slate-500 font-bold">19:58 IST</span> — <span className="font-bold text-emerald-700">REPLACEMENT_ROUTE_APPROVED</span>: Lower-risk replacement route approved & activated.
-                </div>
+                {selectedIncidentDetail?.timeline?.length ? selectedIncidentDetail.timeline.map((evt, idx) => (
+                  <div key={idx} className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
+                    <span className="text-slate-500 font-bold">{new Date(evt.timestamp).toLocaleTimeString()}</span> — <span className="font-bold text-[#0B4F8A]">{evt.event_type}</span>: {evt.description}
+                  </div>
+                )) : <div className="text-slate-400 italic">Select an incident (Overview threat list or Incidents tab) to see its recorded timeline.</div>}
               </div>
             </div>
 
@@ -1276,6 +974,38 @@ export default function EocDashboard({
 
       </div>
 
+    </div>
+  );
+}
+
+// Evidence linked to the threat selected in the left panel (COP canonical evidence).
+function SelectedThreatEvidence({ copData, threatId }) {
+  const threat = (copData?.threats || []).find((t) => t.id === threatId);
+  if (!threat) {
+    return (
+      <div className="bg-white border border-[#D9E0E8] rounded-md p-2 text-[10px] text-slate-500 italic shrink-0">
+        Select a threat to inspect its linked evidence.
+      </div>
+    );
+  }
+  const evidence = (copData?.evidence || []).filter((e) => e.threat_id === threat.id);
+  return (
+    <div className="bg-white border border-[#D9E0E8] rounded-md p-2 text-[10px] space-y-1 shrink-0 max-h-56 overflow-y-auto">
+      <div className="font-extrabold uppercase text-[#0B4F8A]">Evidence for {threat.id}</div>
+      <div className="text-slate-600">Status {threat.status} · source {threat.source || 'unknown'}{threat.is_demo ? ' · DEMO/SIMULATED' : ''} · confidence {threat.confidence}</div>
+      {evidence.length === 0 ? (
+        <div className="text-slate-500 italic">No evidence records linked to this threat.</div>
+      ) : evidence.map((e) => (
+        <div key={e.id} className="border border-slate-200 rounded p-1.5 bg-slate-50">
+          <div className="flex justify-between gap-1">
+            <b className="truncate">{e.id}</b>
+            {e.is_simulation && <span className="text-amber-800 font-bold">SIMULATED</span>}
+          </div>
+          <div>{e.source_type} {e.source_id || ''} · {e.observation_type}</div>
+          {e.description && <div className="text-slate-600">{e.description}</div>}
+          <div className="text-slate-500">Source-declared confidence {Math.round(e.confidence * 100)}% · {new Date(e.timestamp).toLocaleTimeString()}</div>
+        </div>
+      ))}
     </div>
   );
 }

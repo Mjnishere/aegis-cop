@@ -43,3 +43,32 @@ data/*.db
 data/*.db-journal
 data/*.db-shm
 data/*.db-wal
+
+# Environment files and credentials (keep only the *.env.example templates)
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+*.pem
+*.key
+*.p12
+credentials*.json
+
+# Any local database, wherever it is created
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Restricted / large raster data anywhere in the tree (CartoDEM and derivatives)
+*.tif
+*.tiff
+*.zip
+
+# Logs and local tooling output
+*.log
+.coverage
+htmlcov/

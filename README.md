@@ -1,207 +1,237 @@
-# 🌊 ResilienceRoute
+# AEGIS-COP
 
-### AI-Powered Urban Flood Nowcasting & Emergency Route Intelligence Platform
+**A tactical-edge Common Operating Picture (COP) for flood-response route decisions in
+Hubballi-Dharwad, India.**
 
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/Frontend-React_19-61DAFB?style=flat-square&logo=react)](https://react.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Styling-Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
-[![Vite](https://img.shields.io/badge/Build-Vite-646CFF?style=flat-square&logo=vite)](https://vitejs.dev/)
-[![Open-Meteo](https://img.shields.io/badge/Weather-Open--Meteo-0075FF?style=flat-square)](https://open-meteo.com/)
-[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python)](https://python.org)
-
-> **Project status (Oct 2026):** this codebase is now **AEGIS-COP**, a research prototype. Capabilities, verification evidence and limitations are tracked in [`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md); scores are uncalibrated heuristics, drainage data is synthetic, and evidence "AI" analysis is a mock. Terrain data is not distributed with the repository — see [`data/terrain/README.md`](data/terrain/README.md). Developer setup: [`CLAUDE.md`](CLAUDE.md).
-
-**SIH Problem Statement**: `SIH26085` — Urban Flood Nowcasting System (Drainage and Rainfall Coupling)
-
-**ResilienceRoute** couples short-term rainfall forecasts with terrain elevation (ISRO CartoDEM V3) and urban drainage constraints to estimate evolving flood risks over a **0–3 hour horizon**. It converts real-time inundation predictions into actionable **hazard-aware emergency routing**, automated **incident management**, and **resource dispatch intelligence** for municipal Emergency Operations Centers (EOC).
-
----
-
-## 🌟 Key Features
-
-### 🌦️ 1. Weather & Preparedness Intelligence
-- **Live Open-Meteo Integration**: Real-time hourly precipitation, temperature, humidity, wind, and weather condition forecasts centered on the Hubballi-Dharwad region.
-- **Chronological Time Alignment**: Automatically aligns 6H, 12H, 24H, and 48H forecast windows starting from the **current forecast hour**.
-- **Municipal Preparedness Engine**: Automatically calculates early warning levels (`NORMAL`, `WATCH`, `PREPARE`, `HIGH PREPAREDNESS`, `CRITICAL PREPAREDNESS`) based on rainfall volume, probability, and active municipal drainage issues.
-- **Dual-Series Chart**: Distinguishes Rain Probability (%) from Rainfall Volume (mm) and Temperature (°C).
-
-### 🚑 2. Hazard-Aware Dynamic Routing
-- **Dynamic Risk Weighting**: Automatically server-sever roads with critical flood risk (>80 risk score) and recalculates alternative safe detours via Dijkstra edge weighting.
-- **Route Monitoring & Obstruction Invalidation**: Continuously monitors active emergency routes and automatically proposes lower-risk replacement routes when road blockages occur.
-
-### 🚨 3. Incident Management & Response Planning
-- **Automated Risk Scanning**: Converts high-risk regional signals into action items (e.g. Gokul Road Waterlogging, Dharwad Central Drainage Overflow, Culvert Blockages).
-- **Automated Response Plan Generation**: Proposes matching field resources (NDRF teams, PWD drainage clearance units, municipal pumps) with resource reservation status tracking.
-
-### 📡 4. Field Operations Lifecycle
-- **Real-Time State Machine**: Tracks field units through `EN_ROUTE` → `AT_SCENE` → `OPERATING` → `COMPLETED`.
-- **Live Vehicle Animation**: Smooth map animation of dispatched units navigating toward target incident locations.
-
-### 🛰️ 5. Satellite Earth Observation
-- **NASA GIBS & MOSDAC Integration**: Visualizes VIIRS SNPP Corrected Reflectance True Color Satellite Imagery over urban sectors.
-
----
-
-## 🏗️ System Architecture
+AEGIS-COP is an edge-oriented geospatial decision-support COP: it links observations,
+evidence, threats and geographic context to route impact, explains the resulting
+recommendation, and leaves the decision to a human operator.
 
 ```
-Rainfall Forecast (Open-Meteo) ──┐
-                                 ├──> Runoff & Inundation Model ──> Road Hazard Weighting ──> Dynamic Dijkstra Routing
-Terrain Elevation (CartoDEM)  ──┤
-Drainage Capacity & Blockage  ──┘
+Observation → Evidence → Threat → Geographic context → Route impact → Explainable recommendation → Human review
 ```
 
+> **This is a hackathon research prototype, not an operational system.** Hazard scores
+> are uncalibrated heuristics, field and sensor reports in the demo are **simulated**,
+> there is no live sensor ingestion, no computer-vision model and no sensor fusion, and
+> coverage is limited to one road network (Hubballi-Dharwad). See
+> [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+
+![Simulated sensor report compromises the mission route; dashed green alternative avoids the threat zone](docs/screenshots/02-route-compromised-alternative.png)
+
+## Problem
+
+During urban flooding, an Emergency Operations Centre (EOC) has to keep convoys and
+response teams moving on roads that change minute by minute. Reports arrive from field
+teams and sensors, but there is rarely one place that shows the threat, the evidence
+behind it, which planned routes it compromises, what the alternative costs, and who
+approved the change.
+
+AEGIS-COP builds on the earlier *ResilienceRoute* flood-routing project. It ties those
+pieces into one auditable workflow on a shared map.
+
+## What it does (the mission workflow)
+
+1. **Mission setup.** The operator starts a supply-convoy mission (Navanagar staging area
+   → Hubballi city centre). The backend plans a threat-aware route on the OpenStreetMap
+   road graph and registers it for monitoring. The map shows the route, origin,
+   destination and the mission area (road-network coverage).
+2. **Simulated field/sensor report.** A reproducible report, labelled **SIMULATED**,
+   creates a canonical evidence record with provenance (`is_simulation: true`) and a
+   threat linked to it.
+3. **Threat assessment.** The panel shows severity, category, source, timestamp, linked
+   evidence and confidence. Threat confidence comes from a documented rule: a single
+   unconfirmed source is MEDIUM if its declared confidence is ≥ 0.5, otherwise LOW, and
+   never HIGH. The evidence confidence is labelled as fixed by the simulation profile,
+   not measured.
+4. **Route compromise.** The route monitor applies the routing policy. An active
+   CRITICAL zone is a hard exclusion (zone radius + 25 m buffer), so the mission route
+   becomes **INVALIDATED** with the threat id in the reason.
+5. **Alternative.** The threat-aware engine computes a replacement that does not enter
+   blocking zones. The panel compares current and proposed routes using backend metrics:
+   distance, travel time, heuristic hazard score and threat zones crossed. If no
+   acceptable route exists, the UI says so (`NO_SAFE_AVAILABLE_ROUTE`) and does not
+   invent one.
+6. **Operator decision.** The operator can **APPROVE** or **REJECT**. Both are persisted,
+   with a reason. A rejected proposal leaves the route compromised; the operator can
+   recompute.
+7. **Consistent outcome and timeline.** The map, mission panel, incident desk, COP
+   counts and backend agree. The mission log is built from persisted route transitions
+   and recommendation decisions, and it survives a page reload and a backend restart.
+
+The Overview shows this chain at a glance:
+- **Decision chain bar:** the seven steps — MISSION ACTIVE → OBSERVATION RECEIVED →
+  THREAT LINKED → ROUTE IMPACTED → ALTERNATIVE PROPOSED → OPERATOR DECISION → ROUTE
+  REPLACED — each with its time and status. It also says what the operator should do
+  next.
+- **Data sources strip:** what is live, simulated, unavailable or only last known
+  (backend, road graph, terrain, weather, sensor feeds, unit positions).
+- **Active Mission panel:** why the route was invalidated, the current-versus-proposed
+  comparison with the trade-off, the engine's rationale, and APPROVE/REJECT.
+- **Evidence card:** the evidence linked to whichever threat is selected.
+
+The rest of the dashboard comes from the ResilienceRoute base and is reached from the
+left navigation. Simulated parts are labelled as such:
+- **Incident desk:** linked evidence, response plans, and recording a *simulated*
+  dispatch.
+- **Field-unit status:** transitions validated by the backend.
+- **Weather/preparedness:** live Open-Meteo when reachable, or the labelled
+  **RAIN SCENARIO (SIMULATED)**.
+- **Ad-hoc threat-aware route planner.**
+
+## Screenshots
+
+These are real captures from headless Chrome against the local backend on a fresh demo
+database, with outbound network calls blocked. That is why weather shows as
+*unavailable*.
+
+| | |
+|---|---|
+| ![Overview before the mission](docs/screenshots/01-overview-before-mission.png) Overview: data sources, empty decision chain, demo threats | ![Alternative approved](docs/screenshots/03-alternative-approved.png) Alternative approved: every chain step complete, route REPLACED |
+| ![No safe route](docs/screenshots/06-no-safe-route.png) Dead-end mission: "No safe alternative exists", no route invented | ![Backend unreachable](docs/screenshots/05-backend-unreachable-stale.png) Backend down: UNREACHABLE, STALE snapshot, chain steps "unknown" |
+| ![Incident desk](docs/screenshots/04-incident-linked-evidence.png) Incident desk with linked SIMULATED evidence | |
+
+## Architecture
+
 ```
-[ Frontend: React 19 + Leaflet + Tailwind CSS ]
-                       │
-                       │ REST API (JSON)
-                       ▼
-[ Backend: FastAPI / Python 3.12 ]
-   ├── Weather Adapter & Open-Meteo Client
-   ├── Flood Routing & Hazard Service (OSMnx / NetworkX)
-   ├── Incident & Response Plan Service
-   └── Route Monitoring & Replacement Service
+React 19 + Leaflet (frontend/)                 FastAPI + SQLite (backend/)
+┌──────────────────────────────┐   REST    ┌────────────────────────────────────────┐
+│ EocDashboard                 │  /api/*   │ routes/        HTTP handlers            │
+│  ├─ Map + COPLayers          │◄─────────►│ services/      domain logic             │
+│  ├─ MissionPanel (workflow)  │           │   threat/  simulated_report, zones      │
+│  ├─ IncidentCenter           │           │   evidence/  cop/  geo/                 │
+│  └─ Field ops, weather, ...  │           │   routing_service (OSMnx/NetworkX)      │
+└──────────────────────────────┘           │   route_monitor / route_replacement     │
+                                           │   terrain_service (CartoDEM, optional)  │
+                                           │ repositories/  SQLite persistence       │
+                                           │ config/routing_policy.py  penalties     │
+                                           └────────────────────────────────────────┘
 ```
 
----
+Details, the mission sequence and the API surface:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Design decisions (ADRs):
+[docs/project/DECISIONS_AND_ROADMAP.md](docs/project/DECISIONS_AND_ROADMAP.md).
 
-## 📁 Repository Structure
+## Technology
 
-```
-ResilienceRoute/
-├── backend/
-│   ├── app/
-│   │   ├── config/             # Risk thresholds & operational config
-│   │   ├── routes/             # FastAPI REST endpoints
-│   │   ├── services/           # Core domain logic
-│   │   │   ├── flood/          # Hydrological runoff & inundation engine
-│   │   │   ├── incidents/      # Incident management & audit logs
-│   │   │   ├── resources/      # Resource matching engine
-│   │   │   ├── field_operations/# Field unit state machine
-│   │   │   ├── routing_service.py # NetworkX OSM graph routing
-│   │   │   └── weather_service.py # Open-Meteo live integration
-│   │   └── main.py             # FastAPI main application entrypoint
-│   ├── test_weather_forecast.py # Weather & scenario test suite
-│   ├── test_operational_fixes.py # Operational & routing test suite
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── EocDashboard.jsx    # Main EOC Command Panel
-│   │   │   ├── WeatherDashboard.jsx# Weather & Preparedness Dashboard
-│   │   │   ├── Map.jsx             # React-Leaflet Map component
-│   │   │   ├── IncidentCenter.jsx  # Incident Response Center
-│   │   │   ├── ResourceCenter.jsx  # Resource Matching & Dispatch
-│   │   │   └── AlertCenter.jsx     # Citizen Safety Alerts
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── package.json
-│   └── vite.config.js
-├── data/
-│   ├── osm/                    # Hubballi-Dharwad OSM GraphML data
-│   └── terrain/                # CartoDEM elevation data
-└── README.md
-```
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2 + SQLite, OSMnx 2.1.1 / NetworkX,
+  Shapely, rasterio, pytest.
+- **Frontend:** React 19, Vite 8, Leaflet / react-leaflet, Tailwind CSS, oxlint.
+- **Data:** OpenStreetMap drive graph (tracked, ODbL); optional local CartoDEM V3 tile
+  (not distributed); Open-Meteo weather (optional, online).
 
----
+## Installation
 
-## 🚀 Getting Started
-
-### Prerequisites
-- **Python 3.10+** (Python 3.12 recommended)
-- **Node.js 18+** and `npm`
-
----
-
-### 1️⃣ Setup & Run Backend
+Requirements: Python 3.12 and Node 20.19+ (tested with 20.19.5).
 
 ```bash
-# Navigate to backend directory
+git clone https://github.com/akaraj187/aegis-cop.git
+cd aegis-cop
+
+# backend
+python3 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements-dev.txt -c backend/requirements.lock.txt
+
+# frontend
+cd frontend && npm ci --ignore-scripts --no-audit --no-fund && cd ..
+```
+
+Terrain is optional. To enable it, download CartoDEM tile D43D yourself (see
+[data/terrain/README.md](data/terrain/README.md)) and point `DEM_PATH` at it. Without it,
+terrain is reported as *unknown* and hazard scores are marked partial.
+
+## Configuration
+
+Copy `backend/.env.example` to `backend/.env` if you need to change defaults. The main
+variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_PATH` | `data/aegis.db` | SQLite file. Use a fresh path for a clean demo |
+| `OSM_GRAPH_PATH` | `data/osm/hubballi_dharwad_drive.graphml` | Road graph |
+| `DEM_PATH` | `data/terrain/cdnd43d_v3r1/cdnd43d.tif` | Optional CartoDEM tile |
+| `MAX_SNAP_DISTANCE_M` | `250` | Inputs farther than this from the road network are rejected (`OUTSIDE_COVERAGE`) |
+| `WEATHER_MAX_AGE_MINUTES` | `90` | Older weather observations are treated as stale |
+| `VITE_API_BASE_URL` (frontend) | `http://127.0.0.1:8000/api` | Backend URL |
+
+No API keys are required. The IMD, MOSDAC and FIRMS integrations are disabled or
+stubbed unless you configure your own access.
+
+## Running the demo
+
+The short version:
+
+```bash
+# terminal 1: backend, offline, fresh database
 cd backend
+DATABASE_PATH=$(mktemp -d)/demo.db HTTPS_PROXY=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9 \
+  NO_PROXY=localhost,127.0.0.1 ../.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# Create virtual environment
-python -m venv venv
+# terminal 2: frontend
+cd frontend && npm run dev                      # http://localhost:5173
 
-# Activate virtual environment
-# Windows (PowerShell):
-.\venv\Scripts\Activate.ps1
-# macOS / Linux:
-# source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start FastAPI backend server
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+# terminal 3: labelled demo fixtures (refuses to run on a non-empty database)
+.venv/bin/python scripts/demo/seed_demo.py
 ```
 
-The backend server will run at:
-- **API Base URL**: `http://127.0.0.1:8000`
-- **Interactive Swagger Docs**: `http://127.0.0.1:8000/docs`
+Then, in the **Active Mission** panel: **START MISSION** → **SIMULATE SENSOR REPORT** →
+**REJECT** or **APPROVE**. For the honest-failure case, run
+`.venv/bin/python scripts/demo/no_safe_route_case.py`, then **CHECK ROUTE** →
+**COMPUTE ALTERNATIVE ROUTE**. The click-by-click script, expected results, reset and
+recovery steps are in [docs/DEMO.md](docs/DEMO.md).
 
----
-
-### 2️⃣ Setup & Run Frontend
+## Tests
 
 ```bash
-# Navigate to frontend directory
-cd frontend
-
-# Install Node dependencies
-npm install
-
-# Start Vite dev server
-npm run dev
+cd backend && ../.venv/bin/python -m pytest      # offline, temp SQLite, sockets blocked
+cd frontend && npm run lint && npm run build
 ```
 
-The frontend application will be available at:
-- **App URL**: `http://127.0.0.1:5173`
+- Last recorded run (2026-10-10) with the DEM present: 130 passed.
+- Without the DEM: 103 passed, 27 skipped with reasons. Without the DEM and the road
+  graph: 66 passed, 64 skipped.
+- `tests/test_mission_workflow.py` covers:
+  - report → evidence + threat → INVALIDATED;
+  - reject, then approve;
+  - unknown inputs;
+  - an honest no-safe-route case.
+- Do not run the scripts in `backend/legacy_checks/` or `scripts/legacy_checks/`. They
+  call a live server and can change its database.
 
----
+## Data attribution and licensing
 
-## 🧪 Running Tests
+- **Road network:** © OpenStreetMap contributors, ODbL 1.0
+  ([data/osm/README.md](data/osm/README.md)). Map tiles: © OpenStreetMap contributors.
+- **Terrain:** CartoDEM, National Remote Sensing Centre, ISRO, Government of India.
+  It is **not included**: its licence is single-user and excludes Internet hosting.
+- **Weather:** Open-Meteo (when online). Satellite overlay: NASA GIBS.
+- Full register: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+- **Code licence:** none has been chosen yet. Until a `LICENSE` file is added, the
+  default copyright rules apply. A code licence would not cover third-party data, and
+  it would never allow redistribution of CartoDEM.
 
-### Backend Unit & Integration Tests
+## Limitations (summary)
 
-```bash
-cd backend
+- **Heuristic scores.** Hazard scores and routing penalties are uncalibrated
+  (`backend/app/config/routing_policy.py`).
+- **Simulated inputs.** Field and sensor reports are simulated. The "AI" evidence
+  analysis is a filename-keyword mock. Drainage data is synthetic.
+- **Single-point weather.** Weather is sampled at one point for the whole city.
+- **Partial terrain coverage.** About 12.6% of the road graph lies outside the DEM tile.
+- **No security layer.** There is no authentication. Bind the API to `127.0.0.1`.
+- **Unproven portability.** Behaviour is only tested on Hubballi-Dharwad, so regional
+  portability is not demonstrated.
 
-# Run weather forecast test suite
-.\venv\Scripts\python.exe -m unittest test_weather_forecast.py
+Full list: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Verified versus unverified status:
+[docs/project/IMPLEMENTATION_STATUS.md](docs/project/IMPLEMENTATION_STATUS.md).
 
-# Run operational fixes regression test suite
-.\venv\Scripts\python.exe test_operational_fixes.py
+## Roadmap
 
-# Run targeted response plan bugfix test suite
-.\venv\Scripts\python.exe test_response_plan_bugfix.py
+These are planned, not implemented:
+1. Real evidence ingestion (field app / sensor feeds) with provenance.
+2. Multi-source confidence (corroboration) replacing the single-source rule.
+3. Calibrated hazard scoring against observed flooding.
+4. Authentication and roles for approve/reject.
+5. Region-independent data pipeline.
 
-# Discover & run all tests
-.\venv\Scripts\python.exe -m unittest discover -s . -p "test_*.py"
-```
-
-### Frontend Build Verification
-
-```bash
-cd frontend
-npm run build
-```
-
----
-
-## 🔌 API Reference Highlights
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/health` | `GET` | System health check |
-| `/api/weather` | `GET` | Live meteorological observations |
-| `/api/weather/forecast` | `GET` | 48-hour chronological forecast aligned to current hour |
-| `/api/route/flood-safe` | `GET` | Dynamic flood-safe route calculation |
-| `/api/national/incidents` | `GET` | Active incident queue |
-| `/api/scenario/activate` | `POST` | Activate controlled flood demonstration scenario |
-| `/api/scenario/deactivate` | `POST` | Deactivate scenario & restore live Open-Meteo forecast |
-
----
-
-## 📄 License & Disclaimer
-
-This project is built for **SIH26085** decision support and demonstration purposes. Weather data is powered by [Open-Meteo](https://open-meteo.com/). Drainage network overlays utilize modeled sector corridors.
+See [docs/project/DECISIONS_AND_ROADMAP.md](docs/project/DECISIONS_AND_ROADMAP.md).

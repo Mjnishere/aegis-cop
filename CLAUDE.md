@@ -21,10 +21,10 @@ Read before significant work:
   explicitly asks.**
 - **Tests must not touch `data/aegis.db` or the network.** Use the pytest setup
   below; it redirects `DATABASE_PATH` to a temp dir and blocks sockets.
-- **Never run `pytest` on `backend/` root or the repo root**, and never run
-  `backend/test_phase5b.py`, `test_phase5c.py`, `e2e_test.py`,
-  `test_operational_fixes.py` or `scripts/test_hazard.py`: they execute HTTP calls
-  against `127.0.0.1:8000` at import time and can mutate a running server's DB.
+- **Never run `pytest` on `backend/` root or the repo root**, and never run the scripts
+  in `backend/legacy_checks/` (e.g. `test_phase5b.py`, `test_phase5c.py`, `e2e_test.py`,
+  `test_operational_fixes.py`) or `scripts/legacy_checks/test_hazard.py`: they execute
+  HTTP calls against `127.0.0.1:8000` and can mutate a running server's DB.
 - Do not describe heuristic scores as calibrated risk, mock CV as AI, or
   Hubballi-only behaviour as regional portability. Status labels are defined in
   `docs/project/IMPLEMENTATION_STATUS.md`; update that file when status changes.

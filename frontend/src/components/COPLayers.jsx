@@ -1,11 +1,12 @@
 import React from 'react';
-import { Circle, CircleMarker, Polyline, Popup } from 'react-leaflet';
+import { Circle, CircleMarker, Polyline, Popup, Rectangle, Tooltip } from 'react-leaflet';
 
 // Canonical COP layers rendered from GET /api/cop. The backend is authoritative:
 // nothing here invents positions, counts or statuses.
 
 const THREAT_COLORS = { CRITICAL: '#991B1B', HIGH: '#DC2626', MODERATE: '#D97706', LOW: '#2563EB' };
-const ROUTE_COLORS = { ACTIVE: '#059669', AT_RISK: '#D97706', INVALIDATED: '#DC2626', REPLACED: '#64748B' };
+// Mission route: blue = active, amber = at risk, red dashed = compromised, green = approved replacement.
+const ROUTE_COLORS = { ACTIVE: '#1D4ED8', AT_RISK: '#D97706', INVALIDATED: '#DC2626', REPLACED: '#059669' };
 const UNIT_COLORS = { EN_ROUTE: '#0B4F8A', AT_SCENE: '#7C3AED', OPERATING: '#7C3AED', RETURNING: '#0891B2', COMPLETED: '#64748B', UNAVAILABLE: '#94A3B8', ASSIGNED: '#059669' };
 const EVIDENCE_COLOR = '#7C3AED';
 
@@ -18,12 +19,37 @@ function Badge({ children, className }) {
   return <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${className}`}>{children}</span>;
 }
 
-export function COPLayers({ copData, visible }) {
+export function COPLayers({ copData, visible, missionArea }) {
   if (!copData) return null;
   const { threats = [], field_units = [], monitored_routes = [], evidence = [] } = copData;
+  // Same rule as MissionPanel: the active mission is the most recently created monitored route.
+  const activeMissionId = [...monitored_routes].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0]?.id;
 
   return (
     <>
+      {missionArea && (
+        <Rectangle
+          bounds={[[missionArea.min_lat, missionArea.min_lon], [missionArea.max_lat, missionArea.max_lon]]}
+          pathOptions={{ color: '#475569', weight: 1, dashArray: '6, 6', fill: false, interactive: false }}
+        />
+      )}
+
+      {visible.routes && monitored_routes.flatMap(r => [['origin', r.origin], ['destination', r.destination]]
+        .map(([kind, p]) => [kind, p, r.id === activeMissionId])
+        .filter(([, p]) => p && typeof p.lat === 'number' && typeof p.lon === 'number')
+        .map(([kind, p, isActive]) => (
+          <CircleMarker
+            key={`mission-${kind}-${r.id}-${isActive ? "active" : "earlier"}`}
+            center={[p.lat, p.lon]}
+            radius={8}
+            pathOptions={{ color: '#0F172A', fillColor: kind === 'origin' ? '#FFFFFF' : '#0F172A', fillOpacity: 1, weight: 3 }}
+          >
+            {/* Permanent labels only for the active (newest) mission, to keep the map readable */}
+            <Tooltip direction="top" offset={[0, -8]} permanent={isActive}>
+              {isActive ? 'Mission ' : 'Earlier mission '}{kind === 'origin' ? 'origin' : 'destination'}
+            </Tooltip>
+          </CircleMarker>
+        )))}
       {visible.routes && monitored_routes.filter(r => r.geometry?.coordinates?.length > 1).map(r => {
         const color = ROUTE_COLORS[r.status] || '#334155';
         return (
@@ -195,6 +221,12 @@ export function COPLayerPanel({ copData, copError, visible, onToggle }) {
           </label>
         );
       })}
+      <div className="mt-1 pt-1 border-t border-slate-200 text-[10px] text-slate-600 space-y-0.5">
+        <div><span className="inline-block w-4 border-t-4 align-middle mr-1" style={{ borderColor: ROUTE_COLORS.ACTIVE }} />mission route (active)</div>
+        <div><span className="inline-block w-4 border-t-4 border-dashed align-middle mr-1" style={{ borderColor: ROUTE_COLORS.INVALIDATED }} />compromised route</div>
+        <div><span className="inline-block w-4 border-t-4 align-middle mr-1" style={{ borderColor: ROUTE_COLORS.REPLACED }} />proposed / approved replacement</div>
+        <div><span className="inline-block w-4 border-t border-dashed align-middle mr-1 border-slate-500" />mission area (road-network coverage)</div>
+      </div>
       {summary?.invalidated_route_count > 0 && (
         <div className="text-red-700 font-bold mt-1">{summary.invalidated_route_count} route(s) INVALIDATED</div>
       )}

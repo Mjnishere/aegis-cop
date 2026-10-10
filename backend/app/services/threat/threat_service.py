@@ -26,8 +26,8 @@ class ThreatService:
             "latitude": payload.latitude,
             "longitude": payload.longitude,
             "radius_m": payload.radius_m,
-            "risk_score": 80 if payload.severity == "CRITICAL" else (60 if payload.severity == "HIGH" else 40),
-            "official_warning": "RED" if payload.severity == "CRITICAL" else "ORANGE",
+            "risk_score": 80 if payload.severity == "CRITICAL" else (60 if payload.severity == "HIGH" else 40),  # severity-derived placeholder, not a calibrated risk
+            "official_warning": "NONE",  # operator/simulated threats carry no official (IMD) warning
             "confidence": payload.confidence,
             "source": payload.source,
             "first_seen": now,
