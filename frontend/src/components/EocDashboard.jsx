@@ -8,6 +8,8 @@ import WeatherDashboard from './WeatherDashboard';
 import ThreatPanel from './ThreatPanel';
 import MissionPanel from './MissionPanel';
 import DecisionChain, { DataSourceStrip } from './DecisionChain';
+import Icon from './ui/Icon';
+import ThemeSelector from './ui/ThemeSelector';
 import { useCOP } from '../hooks/useCOP';
 import { API_BASE_URL } from '../config';
 
@@ -193,7 +195,7 @@ export default function EocDashboard({
       await fetch(`${API_BASE_URL}/national/risk`);
 
       setDemoStep('ASSESSING_INCIDENTS');
-      showToast("Scanning feeds & generating incident candidates...", "info");
+      showToast("Creating DEMO incidents from the built-in region list (no regional risk feed configured)...", "info");
       await fetch(`${API_BASE_URL}/national/incidents/recommend`, { method: 'POST' }).catch(() => {});
 
       setDemoStep('PREPARING_RESPONSE');
@@ -379,7 +381,7 @@ export default function EocDashboard({
   const [activeOperationModal, setActiveOperationModal] = useState(null);
 
   return (
-    <div className="flex h-screen bg-[#F5F7FA] text-slate-900 font-sans overflow-hidden">
+    <div className="flex h-screen bg-canvas text-slate-900 font-sans overflow-hidden">
       
       {/* Toast Notification Banner (Zero Native Browser Alerts) */}
       {toastMessage && (
@@ -397,14 +399,14 @@ export default function EocDashboard({
         <div className="fixed inset-0 z-[3000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-lg border border-slate-300 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs">
             <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-              <h3 className="font-black text-sm uppercase text-[#0B4F8A] flex items-center gap-2">
-                <span>📡</span> FIELD OPERATION IN PROGRESS: {activeOperationModal.name}
+              <h3 className="font-black text-sm uppercase text-accent flex items-center gap-2">
+                <Icon name="radio" size={16} /> FIELD OPERATION IN PROGRESS: {activeOperationModal.name}
               </h3>
               <button onClick={() => setActiveOperationModal(null)} className="text-slate-400 hover:text-slate-700 font-bold text-sm">✕</button>
             </div>
 
             <div className="bg-blue-50/70 border border-blue-200 p-3 rounded space-y-1.5 text-slate-800">
-              <div><b>SELECTED INCIDENT:</b> <span className="font-bold text-[#0B4F8A]">{selectedIncident?.title || 'none selected'}</span></div>
+              <div><b>SELECTED INCIDENT:</b> <span className="font-bold text-accent">{selectedIncident?.title || 'none selected'}</span></div>
               <div><b>STATUS:</b> <span className="font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded border border-purple-200">OPERATING</span></div>
               <div><b>ASSIGNED TEAM:</b> {activeOperationModal.name} ({activeOperationModal.unit_type})</div>
             </div>
@@ -445,176 +447,104 @@ export default function EocDashboard({
       )}
 
       {/* ============================================================ */}
-      {/* 1. LEFT SIDEBAR NAVIGATION APP SHELL                        */}
+      {/* APP SHELL: navigation rail (icons below xl, labels from xl)  */}
       {/* ============================================================ */}
-      <aside className="w-64 bg-white border-r border-[#D9E0E8] flex flex-col justify-between shrink-0 z-30 shadow-sm">
+      <aside className="w-16 xl:w-56 bg-white border-r border-line flex flex-col justify-between shrink-0 z-30">
         <div>
-          {/* Header Branding */}
-          <div className="p-4 border-b border-[#D9E0E8]">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#0B4F8A]"></span>
-              <div>
-                <h1 className="font-extrabold text-sm tracking-tight text-[#0B4F8A] leading-none uppercase">
-                  AEGIS-COP
-                </h1>
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">
-                  Tactical Edge Common Operating Picture
-                </p>
-              </div>
-            </div>
+          <div className="h-14 px-3 xl:px-4 flex items-center gap-2.5 border-b border-line">
+            <span className="w-8 h-8 rounded-md bg-accent text-white flex items-center justify-center shadow-panel">
+              <Icon name="shield" size={18} />
+            </span>
+            <span className="sr-only xl:not-sr-only">
+              <span className="block text-[13px] font-bold tracking-tight text-slate-900 leading-none">AEGIS-COP</span>
+              <span className="block text-[10px] text-slate-500 mt-1 leading-none">Common Operating Picture</span>
+            </span>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="p-3 space-y-1 text-xs font-semibold">
-            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              COMMAND PANELS
-            </div>
-
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`w-full text-left px-3 py-2 rounded-md flex items-center gap-2.5 transition ${
-                activeTab === 'overview' ? 'bg-[#0B4F8A] text-white font-bold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span>▣</span> OVERVIEW
-            </button>
-
-            <button
-              onClick={() => setActiveTab('incidents')}
-              className={`w-full text-left px-3 py-2 rounded-md flex items-center justify-between transition ${
-                activeTab === 'incidents' ? 'bg-[#0B4F8A] text-white font-bold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span>🚨</span> INCIDENTS
-              </div>
-              {activeIncidents.length > 0 && (
-                <span className="text-[9px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded-full">
-                  {activeIncidents.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('field')}
-              className={`w-full text-left px-3 py-2 rounded-md flex items-center justify-between transition ${
-                activeTab === 'field' ? 'bg-[#0B4F8A] text-white font-bold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span>📡</span> FIELD OPERATIONS
-              </div>
-              <span className="text-[9px] text-blue-800 font-bold">
-                {fieldUnits.length} Teams
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('weather')}
-              className={`w-full text-left px-3 py-2 rounded-md flex items-center justify-between transition ${
-                activeTab === 'weather' ? 'bg-[#0B4F8A] text-white font-bold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span>🌦️</span> WEATHER & PREPAREDNESS
-              </div>
-              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                weatherForecast?.status === 'success' ? 'bg-blue-100 text-blue-900' : 'bg-amber-100 text-amber-800'
-              }`}>
-                {weatherForecast?.is_controlled_scenario ? 'SCENARIO' : weatherForecast?.status === 'success' ? 'LIVE' : 'UNAVAILABLE'}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('satellite')}
-              className={`w-full text-left px-3 py-2 rounded-md flex items-center gap-2.5 transition ${
-                activeTab === 'satellite' ? 'bg-[#0B4F8A] text-white font-bold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span>🛰</span> SATELLITE
-            </button>
-
-            <button
-              onClick={() => setActiveTab('national')}
-              className={`w-full text-left px-3 py-2 rounded-md flex items-center gap-2.5 transition ${
-                activeTab === 'national' ? 'bg-[#0B4F8A] text-white font-bold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span>🌐</span> NATIONAL FLOOD RISK
-            </button>
+          <nav className="p-2 xl:p-3 space-y-0.5 text-[13px]" aria-label="Command panels">
+            <div className="sr-only xl:not-sr-only px-2 pt-1 pb-2 panel-title">Command panels</div>
+            {[
+              { id: 'overview', label: 'Overview', icon: 'grid' },
+              { id: 'incidents', label: 'Incidents', icon: 'alert',
+                badge: activeIncidents.length > 0 ? <span className="chip-bad">{activeIncidents.length}</span> : null },
+              { id: 'field', label: 'Field Operations', icon: 'users',
+                badge: <span className="text-[10px] text-slate-500 font-semibold">{fieldUnits.length}</span> },
+              { id: 'weather', label: 'Weather & Preparedness', icon: 'cloud',
+                badge: <span className={weatherForecast?.is_controlled_scenario ? 'chip-warn' : weatherForecast?.status === 'success' ? 'chip-ok' : 'chip-muted'}>
+                  {weatherForecast?.is_controlled_scenario ? 'SCENARIO' : weatherForecast?.status === 'success' ? 'LIVE' : 'N/A'}
+                </span> },
+              { id: 'satellite', label: 'Satellite', icon: 'satellite' },
+              { id: 'national', label: 'Regional Overview', icon: 'globe' },
+            ].map((item) => {
+              const active = activeTab === item.id;
+              return (
+                <button key={item.id} onClick={() => setActiveTab(item.id)} title={item.label}
+                  aria-current={active ? 'page' : undefined}
+                  className={`relative w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors justify-center xl:justify-start ${
+                    active ? 'bg-accent-soft text-accent font-semibold' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}>
+                  {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent" aria-hidden="true" />}
+                  <Icon name={item.icon} size={18} />
+                  <span className="sr-only xl:not-sr-only xl:flex-1 text-left">{item.label}</span>
+                  {item.badge && <span className="hidden xl:inline-flex">{item.badge}</span>}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
-        {/* Bottom System Provenance */}
-        <div className="p-3 border-t border-[#D9E0E8] bg-slate-50 text-[10px] text-slate-600 space-y-1">
-          <div className="font-bold text-slate-800">HUBBALLI–DHARWAD EOC</div>
-          <div className={`font-bold ${copError ? 'text-red-700' : copData ? 'text-emerald-700' : 'text-slate-500'}`}>
-            BACKEND: ● {copError ? 'UNREACHABLE' : copData ? 'CONNECTED' : 'CONNECTING'}
+        <div className="p-2 xl:p-3 border-t border-line text-[11px] text-slate-500 space-y-1">
+          <div className="hidden xl:block font-semibold text-slate-700">Hubballi–Dharwad EOC</div>
+          <div className="flex items-center gap-1.5 justify-center xl:justify-start" title="Backend connection (COP refresh every 10 s)">
+            <span className={`dot ${copError ? 'bg-red-500' : copData ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+            <span className="sr-only xl:not-sr-only">{copError ? 'Backend unreachable' : copData ? 'Backend connected' : 'Connecting…'}</span>
           </div>
-          <div className="text-slate-500 font-mono">TIME: {lastUpdatedTime}</div>
+          <div className="hidden xl:block font-mono text-[10px]">Last sync {lastUpdatedTime}</div>
         </div>
       </aside>
 
       {/* ============================================================ */}
       {/* MAIN CONTENT AREA                                            */}
       {/* ============================================================ */}
-      <div className="flex-1 flex flex-col overflow-hidden relative">
-        
-        {/* Top Header Bar */}
-        <header className="bg-white border-b border-[#D9E0E8] px-5 py-3 flex justify-between items-center z-20 shrink-0 shadow-sm">
-          <div>
-            <h2 className="text-sm font-extrabold uppercase tracking-tight text-[#0B4F8A]">
-              AEGIS-COP — TACTICAL EDGE COMMON OPERATING PICTURE
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden relative">
+
+        {/* Header */}
+        <header className="min-h-14 bg-white border-b border-line px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-2 z-20 shrink-0">
+          <div className="min-w-0 mr-auto">
+            <h2 className="text-[15px] font-bold tracking-tight text-slate-900 leading-tight">
+              AEGIS-COP <span className="font-normal text-slate-400">/</span>{' '}
+              <span className="font-semibold text-slate-600">Geospatial Intelligence &amp; Decision Support</span>
             </h2>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Observation → evidence → threat → route impact → explainable recommendation → human decision · Hubballi-Dharwad prototype
+            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+              <Icon name="pin" size={12} />
+              Hubballi–Dharwad, Karnataka · road-network coverage of this prototype only
             </p>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-semibold">
-            <button
-              onClick={() => setActiveTab('weather')}
-              className="text-slate-700 hover:bg-slate-200 bg-slate-100 px-3 py-1.5 rounded border border-slate-200 flex items-center gap-2 cursor-pointer transition font-mono text-xs"
-              title="Click to open Weather & Preparedness Dashboard"
-            >
-              <span>🌦️</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <button onClick={() => setActiveTab('weather')}
+              className={weatherForecast?.status === 'success' ? (weatherForecast.is_controlled_scenario ? 'chip-warn' : 'chip-info') : 'chip-muted'}
+              title={weatherForecast?.status === 'success' ? 'Open Weather & Preparedness' : (weatherForecast?.error ? 'Weather provider unavailable' : 'No weather response')}>
+              <Icon name="cloud" size={12} />
               {weatherForecast?.status === 'success' ? (
                 <>
-                  {weatherForecast.is_controlled_scenario && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800" title="Controlled demonstration scenario — not live observation">
-                      CONTROLLED SCENARIO
-                    </span>
-                  )}
-                  <span>{weatherForecast.current?.temperature_c ?? '--'}°C</span>
-                  <span className="text-slate-400">|</span>
-                  <span>Rain Prob 6h: <strong>{weatherForecast.summary?.max_prob_6h ?? '--'}%</strong></span>
-                  <span className="text-slate-400">|</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-black text-white ${
-                    weatherForecast.summary?.preparedness_badge === 'CRITICAL' ? 'bg-red-700' :
-                    weatherForecast.summary?.preparedness_badge === 'HIGH' ? 'bg-amber-600' : 'bg-emerald-600'
-                  }`}>
-                    {weatherForecast.summary?.preparedness_badge ?? 'UNKNOWN'}
-                  </span>
+                  {weatherForecast.is_controlled_scenario && 'SCENARIO · '}
+                  {weatherForecast.current?.temperature_c ?? '--'}°C · rain 6h {weatherForecast.summary?.max_prob_6h ?? '--'}%
+                  · {weatherForecast.summary?.preparedness_badge ?? 'UNKNOWN'}
                 </>
-              ) : (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-800" title={weatherForecast?.error || 'No weather response'}>
-                  WEATHER UNAVAILABLE
-                </span>
-              )}
+              ) : 'Weather unavailable'}
             </button>
 
-            <div className={`font-bold px-2.5 py-1.5 rounded border ${copError ? 'text-red-700 bg-red-50 border-red-200' : copData ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-slate-600 bg-slate-50 border-slate-200'}`}
-              title="Based on the last COP refresh (every 10 s)">
-              ● {copError ? 'BACKEND UNREACHABLE' : copData ? 'BACKEND CONNECTED' : 'CONNECTING'}
-            </div>
+            <span className={copError ? 'chip-bad' : copData ? 'chip-ok' : 'chip-muted'} title="Based on the last COP refresh (every 10 s)">
+              <span className={`dot ${copError ? 'bg-red-500' : copData ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+              {copError ? 'BACKEND UNREACHABLE' : copData ? 'BACKEND CONNECTED' : 'CONNECTING'}
+            </span>
 
-            {/* Run Flood Response Demo Button */}
-            <button
-              onClick={handleRunFloodResponseDemo}
-              disabled={!!demoStep}
-              className="bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold text-xs px-4 py-2 rounded shadow-sm transition disabled:opacity-50 flex items-center gap-1.5"
-            >
-              <span>🌊</span>
+            {/* The one implemented scenario: controlled (simulated) rain inputs */}
+            <button onClick={handleRunFloodResponseDemo} disabled={!!demoStep}
+              className={scenarioStatus?.active ? 'btn-secondary' : 'btn-primary'}
+              title="Controlled rain scenario: labelled simulated weather inputs, not observations">
+              <Icon name="flask" size={14} />
               <span>
                 {demoStep === 'ACTIVATING_SCENARIO' && 'ACTIVATING SCENARIO...'}
                 {demoStep === 'REFRESHING_RISK' && 'REFRESHING RISK...'}
@@ -624,18 +554,22 @@ export default function EocDashboard({
                 {!demoStep && (scenarioStatus?.active ? 'END RAIN SCENARIO' : 'RAIN SCENARIO (SIMULATED)')}
               </span>
             </button>
+
+            <ThemeSelector />
           </div>
         </header>
 
         {/* Controlled Scenario Banner */}
         {scenarioStatus?.active && (
-          <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-1.5 flex justify-between items-center text-xs font-bold shrink-0 z-10">
+          <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-1.5 flex flex-wrap gap-x-4 justify-between items-center text-xs font-semibold shrink-0 z-10">
             <div className="flex items-center gap-2">
-              <span className="text-amber-700">⚠</span>
+              <Icon name="flask" size={14} className="text-amber-700" />
               <span>CONTROLLED DEMONSTRATION SCENARIO — NOT LIVE OBSERVATION</span>
             </div>
             <div className="text-[11px] font-mono text-amber-800">
-              CONTROLLED PRECIPITATION: {scenarioStatus.config?.precipitation_mm || 80} mm — CONTROLLED SCENARIO | DRAINAGE BLOCKAGE: {scenarioStatus.config?.blockage_percent || 50}%
+              {scenarioStatus.config?.label || 'Controlled scenario'}
+              {typeof scenarioStatus.config?.precipitation_mm === 'number' && ` · precipitation ${scenarioStatus.config.precipitation_mm} mm`}
+              {typeof scenarioStatus.config?.blockage_percent === 'number' && ` · drainage blockage ${scenarioStatus.config.blockage_percent}%`}
             </div>
           </div>
         )}
@@ -644,55 +578,40 @@ export default function EocDashboard({
         {/* TAB 1: EOC OVERVIEW DASHBOARD                               */}
         {/* ============================================================ */}
         {activeTab === 'overview' && (
-          <div className="flex-1 flex flex-col overflow-hidden bg-[#F5F7FA] p-4 gap-3">
-            
-            {/* Data-source availability and the mission decision chain (backend state only) */}
-            <DataSourceStrip copData={copData} copError={copError} systemStatus={systemStatus} />
+          <div className="flex-1 min-h-0 overflow-y-auto xl:overflow-hidden bg-canvas p-3 flex flex-col gap-3">
+
+            {/* Operational summary (COP summary contract + active mission record) and data sources */}
+            <section className="panel px-3 py-2 flex flex-wrap items-center gap-x-6 gap-y-2 shrink-0" aria-label="Operational summary">
+              {copError && copData && (
+                <span className="chip-bad" title={`Last refresh failed: ${copError}`}>STALE SNAPSHOT · {new Date(copData.generated_at).toLocaleTimeString()}</span>
+              )}
+              <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+                {[
+                  ['Active threats', copData?.summary?.active_threat_count, 'bad'],
+                  ['Monitored routes', copData?.summary?.monitored_route_count, null],
+                  ['Compromised routes', copData?.summary?.invalidated_route_count, 'bad'],
+                  ['Awaiting operator', missionState?.detail ? (missionState.detail.recommendations || []).filter(r => r.status === 'PENDING').length : undefined, 'warn'],
+                  ['Active evidence', copData?.summary?.active_evidence_count, null],
+                ].map(([label, value, tone]) => (
+                  <div key={label} className="flex items-baseline gap-1.5" title={label === 'Awaiting operator' ? 'Pending recommendations on the active mission' : 'From the COP summary'}>
+                    <dd className={`text-lg font-semibold font-mono leading-none ${
+                      typeof value !== 'number' ? 'text-slate-400' : value > 0 && tone === 'bad' ? 'text-red-700' : value > 0 && tone === 'warn' ? 'text-amber-700' : 'text-slate-900'
+                    }`}>{typeof value === 'number' ? value : '–'}</dd>
+                    <dt className="text-[11px] text-slate-500">{label}</dt>
+                  </div>
+                ))}
+              </dl>
+              <div className="xl:ml-auto min-w-0">
+                <DataSourceStrip copData={copData} copError={copError} systemStatus={systemStatus} />
+              </div>
+            </section>
+
             <DecisionChain mission={missionState} copData={copData} />
 
-            {/* Main Area: Priority Queue (left) | Map (center) | Active Response Teams & Route Monitoring (right) */}
-            <div className="flex-1 flex gap-3 overflow-hidden">
-              
-              {/* Left COP Threat Intelligence Panel */}
-              <div className="w-64 shrink-0 overflow-hidden flex flex-col gap-2">
-                {copLoading ? (
-                  <div className="p-4 bg-white border border-[#D9E0E8] rounded-md text-xs font-bold text-slate-500 italic">
-                    Loading COP...
-                  </div>
-                ) : copError && !copData ? (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs font-bold text-red-700">
-                    Unable to load COP data: {copError}
-                  </div>
-                ) : (
-                  <>
-                  {copError && (
-                    <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded-md text-[11px] font-bold text-red-700">
-                      STALE — last refresh failed ({copError}). Showing snapshot from {new Date(copData.generated_at).toLocaleTimeString()}.
-                    </div>
-                  )}
-                  <div className="flex-1 min-h-0">
-                  <ThreatPanel 
-                    threats={copData?.threats || []} 
-                    onSelectThreat={(t) => handleSelectIncident({
-                      incident_id: t.id,
-                      title: t.title,
-                      severity: t.severity,
-                      status: t.status,
-                      latitude: t.latitude,
-                      longitude: t.longitude,
-                      hazard_type: t.category,
-                      description: t.description
-                    })} 
-                    selectedThreatId={selectedIncident?.incident_id} 
-                  />
-                  </div>
-                  <SelectedThreatEvidence copData={copData} threatId={selectedIncident?.incident_id} />
-                  </>
-                )}
-              </div>
+            {/* Map first in the DOM so narrower layouts lead with it */}
+            <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-[17rem_minmax(0,1fr)_24rem] xl:[grid-template-rows:minmax(0,1fr)] xl:flex-1 xl:min-h-0">
 
-              {/* Center City-Wide Situation Map */}
-              <div className="flex-1 bg-white border border-[#D9E0E8] rounded-md overflow-hidden relative shadow-sm">
+              <div className="panel overflow-hidden relative md:col-span-2 xl:col-span-1 xl:col-start-2 xl:row-start-1 h-[58vh] min-h-[420px] xl:h-auto xl:min-h-0">
                 <MapComponent
                   onRouteCalculated={setRouteInfo}
                   floodOverlay={floodOverlay}
@@ -711,10 +630,46 @@ export default function EocDashboard({
                 />
               </div>
 
-              {/* Right Sidebar: active mission (primary) and field units */}
-              <div className="w-96 bg-white border border-[#D9E0E8] rounded-md p-3 flex flex-col gap-3 shrink-0 overflow-y-auto shadow-sm text-xs">
+              {/* Threat queue, linked evidence and the selected threat's record timeline */}
+              <div className="xl:col-start-1 xl:row-start-1 flex flex-col gap-3 min-h-0 h-[560px] xl:h-auto">
+                {copLoading ? (
+                  <div className="panel p-4 text-xs text-slate-500">Loading COP…</div>
+                ) : copError && !copData ? (
+                  <div className="panel p-3 text-xs text-red-800 bg-red-50 border-red-200">
+                    <div className="font-semibold mb-0.5">COP unavailable</div>
+                    The backend could not be reached ({copError}). Nothing is shown until it responds.
+                  </div>
+                ) : (
+                  <>
+                    {copError && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-semibold text-red-800">
+                        STALE — last refresh failed ({copError}). Showing snapshot from {new Date(copData.generated_at).toLocaleTimeString()}.
+                      </div>
+                    )}
+                    <div className="flex-1 min-h-0">
+                      <ThreatPanel
+                        threats={copData?.threats || []}
+                        onSelectThreat={(t) => handleSelectIncident({
+                          incident_id: t.id,
+                          title: t.title,
+                          severity: t.severity,
+                          status: t.status,
+                          latitude: t.latitude,
+                          longitude: t.longitude,
+                          hazard_type: t.category,
+                          description: t.description
+                        })}
+                        selectedThreatId={selectedIncident?.incident_id}
+                      />
+                    </div>
+                    <SelectedThreatEvidence copData={copData} threatId={selectedIncident?.incident_id}
+                      timeline={selectedIncidentDetail?.incident_id === selectedIncident?.incident_id ? selectedIncidentDetail?.timeline : null} />
+                  </>
+                )}
+              </div>
 
-                {/* Active mission: threat report -> route compromise -> alternative -> operator decision */}
+              {/* Active mission (primary decision surface) and field units */}
+              <div className="xl:col-start-3 xl:row-start-1 min-h-0 h-[560px] xl:h-auto overflow-y-auto flex flex-col gap-3">
                 <MissionPanel
                   copData={copData}
                   refreshCop={refreshCop}
@@ -724,59 +679,36 @@ export default function EocDashboard({
                   onStateChange={setMissionState}
                 />
 
-                {/* Live Dispatched Response Teams Panel */}
-                <div className="bg-slate-50 border border-slate-200 rounded p-3 space-y-2">
-                  <div className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider border-b border-slate-200 pb-1 flex justify-between items-center">
-                    <span>FIELD UNITS{fieldUnits.some(u => u.demo) ? ' (DEMO ROSTER)' : ''}</span>
-                    <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-bold">
-                      {fieldUnits.filter(u => ['EN_ROUTE', 'AT_SCENE', 'OPERATING'].includes(fieldUnitStates[u.field_unit_id] || u.status)).length} EN ROUTE / ON SCENE
+                <details className="panel group shrink-0">
+                  <summary className="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between gap-2">
+                    <span className="panel-title flex items-center gap-1.5">
+                      <Icon name="users" size={14} /> Field units{fieldUnits.some(u => u.demo) ? ' · demo roster' : ''}
                     </span>
-                  </div>
-
-                  {fieldUnits.length === 0 ? (
-                    <div className="text-slate-400 italic text-[11px]">No field units registered.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {fieldUnits.map(fu => {
-                        const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'UNKNOWN';
-                        return (
-                          <div key={fu.field_unit_id} className="bg-white p-2.5 rounded border border-slate-200 space-y-1">
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold text-slate-900 flex items-center gap-1">
-                                <span>{fu.unit_type?.includes('BOAT') ? '🛥️' : fu.unit_type?.includes('AMBULANCE') ? '🚑' : '🚒'}</span>
-                                {fu.name}
-                              </span>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                                st === 'EN_ROUTE' ? 'bg-blue-100 text-blue-800' :
-                                st === 'AT_SCENE' ? 'bg-amber-100 text-amber-800' :
-                                st === 'OPERATING' ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800'
-                              }`}>
-                                {st}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-slate-600">
-                              <b>Linked incident:</b> {incidents.find(i => i.incident_id === fu.incident_id)?.title || 'none'} · {fu.city || fu.district || 'location unknown'}
+                    <span className="flex items-center gap-2 text-[11px] text-slate-500">
+                      {fieldUnits.filter(u => ['EN_ROUTE', 'AT_SCENE', 'OPERATING'].includes(fieldUnitStates[u.field_unit_id] || u.status)).length} en route / on scene
+                      <Icon name="chevronDown" size={14} className="transition-transform group-open:rotate-180" />
+                    </span>
+                  </summary>
+                  <div className="px-3 pb-3 space-y-1.5 text-xs">
+                    <p className="text-[10px] text-slate-500">Positions are manual or seeded updates — there is no live GPS feed.</p>
+                    {fieldUnits.length === 0 ? (
+                      <div className="text-slate-500 text-[11px]">No field units registered.</div>
+                    ) : fieldUnits.map(fu => {
+                      const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'UNKNOWN';
+                      return (
+                        <div key={fu.field_unit_id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 truncate">{fu.name}</div>
+                            <div className="text-[10px] text-slate-500 truncate">
+                              {fu.unit_type} · {fu.city || fu.district || 'location unknown'} · incident: {incidents.find(i => i.incident_id === fu.incident_id)?.title || 'none'}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-
-              </div>
-            </div>
-
-            {/* Bottom Operational Timeline */}
-            <div className="bg-white border border-[#D9E0E8] rounded-md p-3 shrink-0 text-xs shadow-sm">
-              <div className="font-extrabold text-[10px] uppercase text-slate-500 mb-1">OPERATIONAL TIMELINE & EVENT FEED</div>
-              <div className="flex gap-2 overflow-x-auto text-[10px]">
-                {selectedIncidentDetail?.timeline ? selectedIncidentDetail.timeline.map((evt, idx) => (
-                  <div key={idx} className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded shrink-0">
-                    <span className="font-mono text-slate-500">{new Date(evt.timestamp).toLocaleTimeString()}</span> - <span className="font-bold text-[#0B4F8A]">{evt.event_type}</span>: <span className="text-slate-800">{evt.description}</span>
+                          <span className={st === 'EN_ROUTE' ? 'chip-info' : st === 'AT_SCENE' || st === 'OPERATING' ? 'chip-warn' : st === 'COMPLETED' ? 'chip-ok' : 'chip-muted'}>{st}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                )) : <div className="text-slate-400 italic">Select an incident to view timeline events.</div>}
+                </details>
               </div>
             </div>
           </div>
@@ -786,7 +718,7 @@ export default function EocDashboard({
         {/* TAB 2: INCIDENT COMMAND DASHBOARD                            */}
         {/* ============================================================ */}
         {activeTab === 'incidents' && (
-          <div className="flex-1 p-4 overflow-hidden bg-[#F5F7FA]">
+          <div className="flex-1 p-4 overflow-hidden bg-canvas">
             <IncidentCenter
               onClose={() => setActiveTab('overview')}
               sharedSelectedIncident={selectedIncident}
@@ -802,17 +734,18 @@ export default function EocDashboard({
         {/* TAB 3: FIELD OPERATIONS DASHBOARD WITH COMPLETE AUDIT TRAIL  */}
         {/* ============================================================ */}
         {activeTab === 'field' && (
-          <div className="flex-1 p-4 overflow-y-auto bg-[#F5F7FA] text-xs space-y-4">
-            <div className="bg-white border border-[#D9E0E8] p-4 rounded-md flex justify-between items-center shadow-sm">
+          <div className="flex-1 p-4 overflow-y-auto bg-canvas text-xs space-y-4">
+            <div className="panel px-4 py-3 flex flex-wrap gap-3 justify-between items-center">
               <div>
-                <h2 className="text-base font-extrabold text-[#0B4F8A] uppercase">FIELD OPERATIONS COMMAND & AUDIT DESK</h2>
-                <div className="text-slate-600 font-bold text-xs mt-0.5">FIELD UNIT STATUS (BACKEND-VALIDATED TRANSITIONS) & INCIDENT TIMELINE</div>
+                <h2 className="text-[15px] font-semibold tracking-tight text-slate-900 flex items-center gap-2"><Icon name="users" size={18} className="text-accent" /> Field Operations</h2>
+                <div className="text-[11px] text-slate-500 mt-0.5">Unit status changes are validated by the backend · positions are manual/seeded (no live GPS) · incident audit trail</div>
               </div>
               <button
                 onClick={submitFieldTeamReport}
                 title="Creates a SIMULATED field-team report on the active mission route"
-                className="bg-red-700 hover:bg-red-800 text-white font-bold text-xs px-3.5 py-2 rounded shadow-sm"
+                className="btn bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100"
               >
+                <Icon name="flask" size={14} />
                 SIMULATE FIELD REPORT: ROAD BLOCKED
               </button>
             </div>
@@ -822,14 +755,14 @@ export default function EocDashboard({
               {fieldUnits.map(fu => {
                 const st = fieldUnitStates[fu.field_unit_id] || fu.status || 'UNKNOWN';
                 return (
-                  <div key={fu.field_unit_id} className="bg-white border border-[#D9E0E8] p-4 rounded-md space-y-2.5 shadow-sm">
-                    <div className="flex justify-between items-center border-b border-[#D9E0E8] pb-2">
+                  <div key={fu.field_unit_id} className="bg-white border border-line p-4 rounded-md space-y-2.5 shadow-sm">
+                    <div className="flex justify-between items-center border-b border-line pb-2">
                       <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                        <span>{fu.unit_type?.includes('BOAT') ? '🛥️' : fu.unit_type?.includes('AMBULANCE') ? '🚑' : '🚒'}</span>
+                        <Icon name="users" size={14} className="text-slate-500" />
                         {fu.name}
                       </span>
                       <span className={`text-[10px] px-2 py-0.5 font-bold rounded border ${
-                        st === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-blue-50 text-[#0B4F8A] border-blue-200'
+                        st === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-blue-50 text-accent border-blue-200'
                       }`}>
                         {st}
                       </span>
@@ -839,7 +772,7 @@ export default function EocDashboard({
                     <div className="text-slate-700"><b>Current Location:</b> {fu.city || fu.district}</div>
 
                     {/* Unit State Machine Action Buttons */}
-                    <div className="pt-2 border-t border-[#D9E0E8] grid grid-cols-2 gap-1.5">
+                    <div className="pt-2 border-t border-line grid grid-cols-2 gap-1.5">
                       <button onClick={() => handleUpdateUnitState(fu.field_unit_id, 'EN_ROUTE')} className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold p-1.5 rounded text-[10px] border border-slate-300">
                         START TRIP
                       </button>
@@ -865,8 +798,8 @@ export default function EocDashboard({
             </div>
 
             {/* Field Incident Audit Table (Detected, Acknowledged, Assessing, Escalated, Resolved) */}
-            <div className="bg-white border border-[#D9E0E8] rounded-md p-4 space-y-3 shadow-sm">
-              <div className="font-extrabold text-xs text-[#0B4F8A] uppercase tracking-wider border-b border-[#D9E0E8] pb-2 flex justify-between items-center">
+            <div className="bg-white border border-line rounded-md p-4 space-y-3 shadow-sm">
+              <div className="font-extrabold text-xs text-accent uppercase tracking-wider border-b border-line pb-2 flex justify-between items-center">
                 <span>FIELD INCIDENT AUDIT & STATUS TRACKING</span>
                 <span className="text-[10px] text-slate-500 font-mono">TOTAL INCIDENTS: {incidents.length}</span>
               </div>
@@ -889,7 +822,7 @@ export default function EocDashboard({
                       <tr key={inc.incident_id} className={`border-b border-slate-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                         <td className="p-2 font-bold text-slate-900">{inc.title}</td>
                         <td className="p-2 text-slate-700">{inc.district}, {inc.state}</td>
-                        <td className="p-2 text-[#0B4F8A] font-medium">{inc.hazard_type}</td>
+                        <td className="p-2 text-accent font-medium">{inc.hazard_type}</td>
                         <td className="p-2">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-black text-white ${
                             inc.severity === 'CRITICAL' ? 'bg-red-700' : 'bg-amber-600'
@@ -908,14 +841,14 @@ export default function EocDashboard({
             </div>
 
             {/* Real timeline of the selected incident (backend record) */}
-            <div className="bg-white border border-[#D9E0E8] rounded-md p-4 space-y-3 shadow-sm">
-              <div className="font-extrabold text-xs text-[#0B4F8A] uppercase tracking-wider border-b border-[#D9E0E8] pb-2">
+            <div className="bg-white border border-line rounded-md p-4 space-y-3 shadow-sm">
+              <div className="font-extrabold text-xs text-accent uppercase tracking-wider border-b border-line pb-2">
                 INCIDENT TIMELINE {selectedIncidentDetail?.title ? `— ${selectedIncidentDetail.title}` : ''}
               </div>
               <div className="space-y-1.5 max-h-48 overflow-y-auto font-mono text-[11px] pr-1">
                 {selectedIncidentDetail?.timeline?.length ? selectedIncidentDetail.timeline.map((evt, idx) => (
                   <div key={idx} className="bg-slate-50 p-2 rounded border border-slate-200 text-slate-800">
-                    <span className="text-slate-500 font-bold">{new Date(evt.timestamp).toLocaleTimeString()}</span> — <span className="font-bold text-[#0B4F8A]">{evt.event_type}</span>: {evt.description}
+                    <span className="text-slate-500 font-bold">{new Date(evt.timestamp).toLocaleTimeString()}</span> — <span className="font-bold text-accent">{evt.event_type}</span>: {evt.description}
                   </div>
                 )) : <div className="text-slate-400 italic">Select an incident (Overview threat list or Incidents tab) to see its recorded timeline.</div>}
               </div>
@@ -928,7 +861,7 @@ export default function EocDashboard({
         {/* TAB 4: WEATHER & PREPAREDNESS DASHBOARD                     */}
         {/* ============================================================ */}
         {activeTab === 'weather' && (
-          <div className="flex-1 flex flex-col p-4 bg-[#F5F7FA] overflow-y-auto">
+          <div className="flex-1 flex flex-col p-4 bg-canvas overflow-y-auto">
             <WeatherDashboard onSelectTab={setActiveTab} isScenarioActive={scenarioStatus?.active} />
           </div>
         )}
@@ -937,22 +870,16 @@ export default function EocDashboard({
         {/* TAB 5: SATELLITE INTELLIGENCE DASHBOARD                      */}
         {/* ============================================================ */}
         {activeTab === 'satellite' && (
-          <div className="flex-1 flex flex-col p-4 bg-[#F5F7FA] gap-3 overflow-hidden">
-            <div className="bg-white border border-[#D9E0E8] p-3 rounded-md flex justify-between items-center shrink-0 shadow-sm">
+          <div className="flex-1 flex flex-col p-4 bg-canvas gap-3 overflow-hidden">
+            <div className="panel px-4 py-3 flex flex-wrap gap-3 justify-between items-center shrink-0">
               <div>
-                <h2 className="text-base font-extrabold uppercase text-[#0B4F8A] flex items-center gap-2">
-                  <span>🛰</span> SATELLITE INTELLIGENCE & EARTH OBSERVATION
-                </h2>
-                <p className="text-xs text-slate-600">NASA GIBS VIIRS SNPP Corrected Reflectance True Color Imagery — Centered on Hubballi-Dharwad Urban Sector</p>
+                <h2 className="text-[15px] font-semibold tracking-tight text-slate-900 flex items-center gap-2"><Icon name="satellite" size={18} className="text-accent" /> Satellite</h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">NASA GIBS VIIRS SNPP true-colour tiles over Hubballi-Dharwad (native resolution coarse at city scale). Imagery is displayed for context only — it is not analysed.</p>
               </div>
-              <div className="flex items-center gap-3 text-xs font-bold">
-                <span className="bg-blue-50 text-[#0B4F8A] border border-blue-200 px-3 py-1 rounded">
-                  FRESHNESS: UNKNOWN (Latest Available GIBS Imagery)
-                </span>
-              </div>
+              <span className="chip-muted">Freshness: unknown (latest available GIBS tiles)</span>
             </div>
 
-            <div className="flex-1 bg-white border border-[#D9E0E8] rounded-md overflow-hidden relative shadow-sm">
+            <div className="flex-1 bg-white border border-line rounded-md overflow-hidden relative shadow-sm">
               <MapComponent
                 showSatellite={true}
                 satLayers={satLayers}
@@ -967,7 +894,7 @@ export default function EocDashboard({
         {/* TAB 5: NATIONAL RISK DASHBOARD                              */}
         {/* ============================================================ */}
         {activeTab === 'national' && (
-          <div className="flex-1 relative overflow-hidden bg-[#F5F7FA]">
+          <div className="flex-1 relative overflow-hidden bg-canvas">
             <NationalView />
           </div>
         )}
@@ -978,34 +905,53 @@ export default function EocDashboard({
   );
 }
 
-// Evidence linked to the threat selected in the left panel (COP canonical evidence).
-function SelectedThreatEvidence({ copData, threatId }) {
+// Evidence linked to the threat selected in the left panel (COP canonical evidence),
+// plus that threat record's backend timeline when it has been loaded.
+function SelectedThreatEvidence({ copData, threatId, timeline }) {
   const threat = (copData?.threats || []).find((t) => t.id === threatId);
   if (!threat) {
     return (
-      <div className="bg-white border border-[#D9E0E8] rounded-md p-2 text-[10px] text-slate-500 italic shrink-0">
-        Select a threat to inspect its linked evidence.
+      <div className="panel px-3 py-2.5 text-[11px] text-slate-500 shrink-0">
+        Select a threat to inspect its linked evidence and record timeline.
       </div>
     );
   }
   const evidence = (copData?.evidence || []).filter((e) => e.threat_id === threat.id);
   return (
-    <div className="bg-white border border-[#D9E0E8] rounded-md p-2 text-[10px] space-y-1 shrink-0 max-h-56 overflow-y-auto">
-      <div className="font-extrabold uppercase text-[#0B4F8A]">Evidence for {threat.id}</div>
-      <div className="text-slate-600">Status {threat.status} · source {threat.source || 'unknown'}{threat.is_demo ? ' · DEMO/SIMULATED' : ''} · confidence {threat.confidence}</div>
+    <div className="panel px-3 py-2.5 text-[11px] space-y-2 shrink-0 max-h-[45%] overflow-y-auto">
+      <div>
+        <div className="panel-title flex items-center gap-1.5"><Icon name="link" size={13} /> Linked evidence</div>
+        <div className="mt-0.5 text-slate-600">
+          <span className="font-mono text-slate-800">{threat.id}</span> · {threat.status} · source {threat.source || 'unknown'}
+          {threat.is_demo && <span className="text-amber-700 font-semibold"> · DEMO/SIMULATED</span>}
+        </div>
+      </div>
       {evidence.length === 0 ? (
-        <div className="text-slate-500 italic">No evidence records linked to this threat.</div>
+        <div className="text-slate-500">No evidence records are linked to this threat.</div>
       ) : evidence.map((e) => (
-        <div key={e.id} className="border border-slate-200 rounded p-1.5 bg-slate-50">
+        <div key={e.id} className="rounded-md border border-slate-200 bg-slate-50 p-2 space-y-0.5">
           <div className="flex justify-between gap-1">
-            <b className="truncate">{e.id}</b>
-            {e.is_simulation && <span className="text-amber-800 font-bold">SIMULATED</span>}
+            <b className="font-mono text-slate-900 truncate">{e.id}</b>
+            {e.is_simulation && <span className="chip-warn">SIMULATED</span>}
           </div>
-          <div>{e.source_type} {e.source_id || ''} · {e.observation_type}</div>
+          <div className="text-slate-700">{e.source_type} {e.source_id || ''} · {e.observation_type}</div>
           {e.description && <div className="text-slate-600">{e.description}</div>}
           <div className="text-slate-500">Source-declared confidence {Math.round(e.confidence * 100)}% · {new Date(e.timestamp).toLocaleTimeString()}</div>
         </div>
       ))}
+      {timeline?.length > 0 && (
+        <div>
+          <div className="panel-title flex items-center gap-1.5 mb-1"><Icon name="clock" size={13} /> Threat record timeline</div>
+          <ol className="space-y-1 border-l border-slate-200 pl-2.5">
+            {timeline.map((evt, idx) => (
+              <li key={idx} className="text-slate-700">
+                <span className="font-mono text-[10px] text-slate-500">{new Date(evt.timestamp).toLocaleTimeString()}</span>{' '}
+                <span className="font-semibold text-accent">{evt.event_type}</span>{evt.description ? ` — ${evt.description}` : ''}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
     </div>
   );
 }

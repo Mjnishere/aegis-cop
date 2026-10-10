@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import MapAutoResize from './ui/MapAutoResize';
+import Icon from './ui/Icon';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { API_BASE_URL } from '../config';
@@ -84,38 +86,26 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
   return (
     <div className="space-y-6 pb-8">
       {/* Top Banner & Mode */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-slate-900 text-white p-5 rounded-xl border border-slate-800 shadow-xl gap-4">
+      <div className="panel flex flex-col md:flex-row justify-between items-start md:items-center px-4 py-3 gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xl">🌦️</span>
-            <h1 className="text-xl font-bold tracking-tight text-white font-sans">
-              HUBBALLI-DHARWAD WEATHER & DRAINAGE PREPAREDNESS
-            </h1>
+          <div className="flex items-center gap-2 mb-0.5">
+            <h1 className="text-[15px] font-semibold tracking-tight text-slate-900 flex items-center gap-2"><Icon name="cloud" size={18} className="text-accent" /> Weather &amp; Preparedness</h1>
           </div>
-          <p className="text-slate-400 text-xs font-mono">
+          <p className="text-slate-500 text-[11px]">
             Open-Meteo forecast (single point, when reachable) & heuristic preparedness levels
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {forecast?.is_controlled_scenario ? (
-            <span className="bg-purple-900/80 text-purple-200 border border-purple-600 px-3 py-1.5 rounded-full text-xs font-bold font-mono tracking-wide animate-pulse">
-              ⚠️ CONTROLLED DEMONSTRATION SCENARIO
-            </span>
+            <span className="chip-warn"><Icon name="flask" size={12} /> CONTROLLED SCENARIO — not observation</span>
           ) : forecast?.status === 'success' ? (
-            <span className="bg-emerald-950 text-emerald-300 border border-emerald-700/60 px-3 py-1 rounded-full text-xs font-bold font-mono">
-              ● LIVE WEATHER FORECAST
-            </span>
+            <span className="chip-ok"><span className="dot bg-emerald-500" /> LIVE FORECAST (Open-Meteo)</span>
           ) : (
-            <span className="bg-amber-950 text-amber-300 border border-amber-700/60 px-3 py-1 rounded-full text-xs font-bold font-mono">
-              ● FORECAST UNAVAILABLE
-            </span>
+            <span className="chip-muted"><span className="dot bg-slate-400" /> FORECAST UNAVAILABLE</span>
           )}
-          <button
-            onClick={fetchForecast}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition"
-          >
-            🔄 Refresh
+          <button onClick={fetchForecast} className="btn-secondary">
+            <Icon name="refresh" size={13} /> Refresh
           </button>
         </div>
       </div>
@@ -198,10 +188,12 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
                 <div className="flex justify-between items-start border-b border-slate-700 pb-3">
                   <div>
                     <h3 className="font-bold text-base text-white">Hubballi-Dharwad</h3>
-                    <p className="text-xs text-slate-400 font-mono">Current Observations</p>
+                    <p className="text-xs text-slate-400 font-mono">{forecast?.is_controlled_scenario ? 'Current conditions (scenario values)' : 'Current conditions'}</p>
                   </div>
                   <span className="text-3xl">
-                    {current.precipitation_mm === null || current.precipitation_mm === undefined ? '❔' : current.precipitation_mm > 0 ? '🌧️' : '⛅'}
+                    {current.precipitation_mm === null || current.precipitation_mm === undefined
+                      ? <span className="text-xs text-slate-500">unknown</span>
+                      : <Icon name={current.precipitation_mm > 0 ? 'cloud' : 'sun'} size={28} title={current.precipitation_mm > 0 ? 'Rain' : 'No rain'} />}
                   </span>
                 </div>
 
@@ -244,7 +236,7 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-4">
               <div>
                 <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <span>📊</span> HOURLY RAINFALL PROBABILITY & EXPECTED PRECIPITATION
+                  <Icon name="activity" size={14} /> HOURLY RAINFALL PROBABILITY & EXPECTED PRECIPITATION
                 </h3>
                 <p className="text-xs text-slate-500 font-mono">
                   Chronological forecast beginning at current hour (6H, 12H, 24H, 48H windows)
@@ -333,7 +325,7 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
               <div className="border-b border-slate-100 pb-3">
                 <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <span>🌊</span> SECTOR DRAINAGE RISKS
+                  <Icon name="layers" size={14} /> SECTOR DRAINAGE RISKS
                 </h3>
                 <p className="text-xs text-slate-500 font-mono">
                   Hubballi-Dharwad Urban Sectors & Vulnerability
@@ -365,7 +357,7 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3 flex flex-col">
               <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                 <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🗺️</span> WEATHER & VULNERABILITY CONTEXT MAP
+                  <Icon name="globe" size={14} /> WEATHER & VULNERABILITY CONTEXT MAP
                 </h3>
                 <span className="text-[10px] font-mono text-slate-500">
                   Hubballi-Dharwad Sector Overlay (Modeled Drainage Corridors)
@@ -374,9 +366,11 @@ export default function WeatherDashboard({ onSelectTab, isScenarioActive }) {
 
               <div className="h-80 w-full rounded-lg overflow-hidden border border-slate-300 relative">
                 <MapContainer center={[15.3647, 75.1240]} zoom={12} className="h-full w-full z-0">
+        <MapAutoResize />
                   <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="basemap-tiles"
                   />
                   {HubballiDharwadSectors.map((sec, i) => (
                     <CircleMarker

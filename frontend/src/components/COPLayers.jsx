@@ -1,4 +1,5 @@
-import React from 'react';
+import Icon from './ui/Icon';
+import React, { useState } from 'react';
 import { Circle, CircleMarker, Polyline, Popup, Rectangle, Tooltip } from 'react-leaflet';
 
 // Canonical COP layers rendered from GET /api/cop. The backend is authoritative:
@@ -56,7 +57,7 @@ export function COPLayers({ copData, visible, missionArea }) {
           <Polyline
             key={`cop-route-${r.id}`}
             positions={r.geometry.coordinates.map(c => [c[1], c[0]])}
-            pathOptions={{ color, weight: 5, opacity: 0.8, dashArray: r.status === 'INVALIDATED' ? '8, 6' : null }}
+            pathOptions={{ color, weight: r.status === 'INVALIDATED' ? 6 : 5, opacity: 0.85 }}
           >
             <Popup>
               <div className="text-xs space-y-1 font-sans">
@@ -108,7 +109,7 @@ export function COPLayers({ copData, visible, missionArea }) {
                     <span className="text-[9px] px-1.5 py-0.5 rounded font-black text-white" style={{ background: color }}>{t.severity}</span>
                   </div>
                   {t.is_demo && <Badge className="bg-amber-100 text-amber-800">DEMO DATA</Badge>}
-                  <div><b>Category:</b> <span className="font-bold text-[#0B4F8A]">{t.category}</span></div>
+                  <div><b>Category:</b> <span className="font-bold text-accent">{t.category}</span></div>
                   <div><b>Confidence:</b> <strong className="text-slate-800">{t.confidence}</strong></div>
                   <div><b>Status:</b> <span className="font-bold text-emerald-800">{t.status}</span></div>
                   <div><b>Threat radius:</b> {t.radius_m} m</div>
@@ -185,50 +186,64 @@ function unplottedCount(copData, key) {
 }
 
 export function COPLayerPanel({ copData, copError, visible, onToggle }) {
+  // Expanded by default only when the map is likely wide enough not to be covered.
+  const [open, setOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 1700);
   const summary = copData?.summary;
   const updatedAt = copData ? new Date(copData.generated_at).toLocaleTimeString() : null;
+  const weatherMode = copData?.system?.weather_mode;
+  const notices = [];
+  if (copError) notices.push(['bad', `${copData ? 'STALE — last refresh failed' : 'COP unavailable'}: ${copError}`]);
+  if (weatherMode === 'CONTROLLED_SCENARIO') notices.push(['warn', 'CONTROLLED SCENARIO weather — not live observation']);
+  else if (weatherMode && weatherMode !== 'AVAILABLE') notices.push(['warn', `Weather ${weatherMode.toLowerCase()} — hazard scores are partial`]);
+  if (summary?.invalidated_route_count > 0) notices.push(['bad', `${summary.invalidated_route_count} route(s) INVALIDATED`]);
 
   return (
-    <div className="absolute bottom-3 right-3 z-[1000] bg-white/95 border border-[#D9E0E8] rounded-md shadow-md p-2 text-[11px] w-56 font-sans">
-      <div className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider border-b border-slate-200 pb-1 mb-1 flex justify-between">
-        <span>COP layers</span>
-        {copData && <span className="text-slate-500 font-mono normal-case" title="Snapshot generated_at">{updatedAt}</span>}
-      </div>
-      {copData?.system?.weather_mode && !['AVAILABLE', 'CONTROLLED_SCENARIO'].includes(copData.system.weather_mode) && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 font-bold rounded px-1.5 py-1 mb-1" title="Hazard scores exclude the weather component and are lower bounds">
-          Weather {copData.system.weather_mode.toLowerCase()} — hazard scores are partial
+    <div className="absolute bottom-6 right-3 z-[1000] w-60 font-sans text-[11px] rounded-lg border border-line bg-white/95 shadow-raised backdrop-blur-sm">
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-left">
+        <span className="panel-title flex items-center gap-1.5"><Icon name="layers" size={13} /> COP layers</span>
+        <span className="flex items-center gap-1.5 text-slate-500">
+          {updatedAt && <span className="font-mono text-[10px]" title="Snapshot generated_at">{updatedAt}</span>}
+          <Icon name={open ? 'chevronDown' : 'chevronUp'} size={14} />
+        </span>
+      </button>
+      {!open && (
+        <div className="px-2.5 pb-2 -mt-1 text-[10px] text-slate-600 space-y-0.5">
+          <div className="font-mono">
+            Threats {summary ? summary.active_threat_count : '–'} · Routes {summary ? summary.monitored_route_count : '–'} · Evidence {summary ? summary.active_evidence_count : '–'}
+          </div>
+          {notices.length > 0 && <div className="font-semibold text-amber-700">{notices.length} notice(s) — expand to read</div>}
         </div>
       )}
-      {copData?.system?.weather_mode === 'CONTROLLED_SCENARIO' && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 font-bold rounded px-1.5 py-1 mb-1">
-          CONTROLLED SCENARIO weather — not live observation
+      {open && (
+        <div className="px-2.5 pb-2.5 space-y-1.5">
+          {notices.map(([tone, text]) => (
+            <div key={text} className={`rounded-md border px-2 py-1 font-semibold ${tone === 'bad' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+              {text}
+            </div>
+          ))}
+          <div className="space-y-0.5">
+            {LAYER_ROWS.map(row => {
+              const missing = unplottedCount(copData, row.key);
+              return (
+                <label key={row.key} className="flex items-center gap-1.5 py-0.5 cursor-pointer">
+                  <input type="checkbox" className="accent-blue-600" checked={visible[row.key]} onChange={() => onToggle(row.key)} />
+                  <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: row.swatch }} />
+                  <span className="flex-1 font-medium text-slate-800">{row.label}</span>
+                  <span className="font-mono text-slate-900">{summary ? row.count(summary) : '–'}</span>
+                  {missing > 0 && <span className="text-[9px] text-slate-500" title="Records without coordinates or geometry are counted but not plotted">({missing} unplotted)</span>}
+                </label>
+              );
+            })}
+          </div>
+          <div className="pt-1.5 border-t border-slate-200 text-[10px] text-slate-600 grid grid-cols-1 gap-0.5">
+            <div><span className="inline-block w-4 border-t-4 align-middle mr-1.5" style={{ borderColor: ROUTE_COLORS.ACTIVE }} />Mission route (active)</div>
+            <div><span className="inline-block w-4 border-t-4 align-middle mr-1.5" style={{ borderColor: ROUTE_COLORS.INVALIDATED }} />Compromised route</div>
+            <div><span className="inline-block w-4 border-t-4 border-dashed align-middle mr-1.5" style={{ borderColor: ROUTE_COLORS.REPLACED }} />Proposed alternative (dashed)</div>
+            <div><span className="inline-block w-4 border-t-4 align-middle mr-1.5" style={{ borderColor: ROUTE_COLORS.REPLACED }} />Approved replacement</div>
+            <div><span className="inline-block w-4 border-t border-dashed align-middle mr-1.5 border-slate-500" />Mission area (road-network coverage)</div>
+          </div>
         </div>
-      )}
-      {copError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 font-bold rounded px-1.5 py-1 mb-1">
-          {copData ? 'STALE — last refresh failed' : 'COP unavailable'}: {copError}
-        </div>
-      )}
-      {LAYER_ROWS.map(row => {
-        const missing = unplottedCount(copData, row.key);
-        return (
-          <label key={row.key} className="flex items-center gap-1.5 py-0.5 cursor-pointer">
-            <input type="checkbox" checked={visible[row.key]} onChange={() => onToggle(row.key)} />
-            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: row.swatch }} />
-            <span className="flex-1 font-bold text-slate-700">{row.label}</span>
-            <span className="font-mono text-slate-900">{summary ? row.count(summary) : '–'}</span>
-            {missing > 0 && <span className="text-[9px] text-slate-500" title="Records without coordinates or geometry are counted but not plotted">({missing} unplotted)</span>}
-          </label>
-        );
-      })}
-      <div className="mt-1 pt-1 border-t border-slate-200 text-[10px] text-slate-600 space-y-0.5">
-        <div><span className="inline-block w-4 border-t-4 align-middle mr-1" style={{ borderColor: ROUTE_COLORS.ACTIVE }} />mission route (active)</div>
-        <div><span className="inline-block w-4 border-t-4 border-dashed align-middle mr-1" style={{ borderColor: ROUTE_COLORS.INVALIDATED }} />compromised route</div>
-        <div><span className="inline-block w-4 border-t-4 align-middle mr-1" style={{ borderColor: ROUTE_COLORS.REPLACED }} />proposed / approved replacement</div>
-        <div><span className="inline-block w-4 border-t border-dashed align-middle mr-1 border-slate-500" />mission area (road-network coverage)</div>
-      </div>
-      {summary?.invalidated_route_count > 0 && (
-        <div className="text-red-700 font-bold mt-1">{summary.invalidated_route_count} route(s) INVALIDATED</div>
       )}
     </div>
   );

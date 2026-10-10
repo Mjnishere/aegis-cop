@@ -7,10 +7,17 @@ from app.repositories.threat_repository import threat_repository
 from app.services.threat.models import ThreatEventCreate, ThreatEventUpdate, RouteExposureRequest
 from app.services.threat.zones import distance_point_to_line_m
 
+def reassess_monitored_routes() -> None:
+    """A threat change can compromise (or stop compromising) monitored routes:
+    reassess them now rather than waiting for a manual check."""
+    from app.services.route_monitor_service import route_monitor_service  # avoid import cycle
+    route_monitor_service.reassess_all(trigger="THREAT_CHANGE")
+
+
 class ThreatService:
     """Business logic service for AEGIS-COP Threat Domain."""
 
-    def create_threat(self, payload: ThreatEventCreate) -> Dict[str, Any]:
+    def create_threat(self, payload: ThreatEventCreate, reassess_routes: bool = True) -> Dict[str, Any]:
         now = datetime.utcnow().isoformat() + "Z"
         threat_id = f"THREAT-{datetime.utcnow().year}-{str(uuid.uuid4())[:8].upper()}"
         
@@ -51,7 +58,10 @@ class ThreatService:
             }]
         }
         
-        return threat_repository.save(data)
+        saved = threat_repository.save(data)
+        if reassess_routes:
+            reassess_monitored_routes()
+        return saved
 
     def get_threat(self, threat_id: str) -> Optional[Dict[str, Any]]:
         return threat_repository.get_by_id(threat_id)
@@ -59,7 +69,7 @@ class ThreatService:
     def list_threats(self, category: Optional[str] = None, status: Optional[str] = None, severity: Optional[str] = None) -> List[Dict[str, Any]]:
         return threat_repository.list_threats(category=category, status=status, severity=severity)
 
-    def update_threat(self, threat_id: str, update: ThreatEventUpdate) -> Optional[Dict[str, Any]]:
+    def update_threat(self, threat_id: str, update: ThreatEventUpdate, reassess_routes: bool = True) -> Optional[Dict[str, Any]]:
         existing = threat_repository.get_by_id(threat_id)
         if not existing:
             return None
@@ -91,10 +101,16 @@ class ThreatService:
         })
         existing["timeline"] = timeline
 
-        return threat_repository.save(existing)
+        saved = threat_repository.save(existing)
+        if reassess_routes:
+            reassess_monitored_routes()
+        return saved
 
-    def close_threat(self, threat_id: str, reason: str = None) -> Optional[Dict[str, Any]]:
-        return threat_repository.close_threat(threat_id=threat_id, reason=reason)
+    def close_threat(self, threat_id: str, reason: str = None, reassess_routes: bool = True) -> Optional[Dict[str, Any]]:
+        closed = threat_repository.close_threat(threat_id=threat_id, reason=reason)
+        if closed is not None and reassess_routes:
+            reassess_monitored_routes()
+        return closed
 
     def get_threat_zone(self, threat_id: str) -> Optional[Dict[str, Any]]:
         threat = threat_repository.get_by_id(threat_id)

@@ -74,13 +74,13 @@ All values below come from the offline rehearsal with the DEM present.
 
 | # | Click | Expected result | What is happening technically |
 |---|---|---|---|
-| 1 | Nothing; Overview | **Data sources** strip (Backend CONNECTED, Road graph LOADED, Terrain AVAILABLE or UNAVAILABLE, Weather UNAVAILABLE, "Sensor / field feeds: NONE CONNECTED — simulated reports only", "Unit positions: MANUAL / SEEDED"). **Decision chain** with 7 empty steps and the hint "Start the mission". Map with the dashed **mission area** rectangle, 3 DEMO threat zones, unit and evidence markers | `GET /api/cop` every 10 s, `GET /api/system/status`. The rectangle is the road-graph extent from `GET /api/geo/coverage`. The chain is derived from backend records only |
-| 2 | **Active Mission → START MISSION** | Blue route with **Mission origin / Mission destination** markers. Panel: **ACTIVE**, 6.9 km · 17 min, "Hazard (heuristic): LOW (36.4) · partial data, up to 96.4 · confidence LIMITED". Log: "Mission route planned and monitoring started". Chain: ✓ MISSION ACTIVE | `GET /api/route` (threat-aware shortest path on the OSM graph), then `POST /api/route-monitor/register` (persisted). With weather unknown the score keeps an explicit upper bound instead of being re-weighted |
-| 3 | **SIMULATE SENSOR REPORT** | Toast "SIMULATED report → threat … (CRITICAL); mission route INVALIDATED". Route turns **red**; a new CRITICAL zone appears on it. **Threat assessment** card: SIMULATED, severity CRITICAL, Road Flooding, radius 75 m, confidence MEDIUM, source SIMULATED_REPORT, timestamp, evidence `EVD-…` (SENSOR SIM-WLS-07), "Source-declared confidence 80% (fixed by the simulation profile, not measured)", and the rule text. **WHY THE ROUTE IS INVALIDATED** box quotes the persisted reason. Chain: ✓ OBSERVATION RECEIVED (SIMULATED) → ✓ THREAT LINKED → ✕ ROUTE IMPACTED | `POST /api/simulation/field-report` creates evidence (`provenance.is_simulation=true`) and a linked threat at the route's midpoint. Confidence MEDIUM comes from the single-source rule (≥ 0.5 → MEDIUM, never HIGH). The route monitor reassesses: CRITICAL = hard exclusion (radius + 25 m buffer) → INVALIDATED, with the threat id in the reason |
-| 4 | Nothing (proposal appears in about 15 s) | **Dashed green** alternative on the map. Comparison at the top of Active Mission: distance 6.9 → 7.9 km, time 17 → 21 min, hazard 36.4 → 30.7, threat zones crossed 1 → 0. "Trade-off: +1.0 km, +4 min to cross 0 instead of 1 known threat zone(s)", the engine's rationale, and "not a guarantee that the road is safe". **APPROVE / REJECT** buttons. Chain: ✓ ALTERNATIVE PROPOSED, ● OPERATOR DECISION — awaiting | `POST /api/route-monitor/{id}/replacement/recommend`. The threat-aware engine excludes blocking zones; metrics come from the backend for both routes |
-| 5 | **REJECT** | Toast "Replacement route rejected by operator — route remains compromised". Proposal disappears; log "Operator REJECTED the alternative (Rejected by operator)". Chain: ! OPERATOR DECISION — REJECTED | `…/replacement/reject` persists the decision and reason. Status stays INVALIDATED |
+| 1 | Nothing; Overview (dark theme by default; Dark/Light/System in the header) | Operational summary and **data sources** (Backend CONNECTED, Road graph LOADED, Terrain AVAILABLE or UNAVAILABLE, Weather UNAVAILABLE, "Sensor / field feeds: NONE CONNECTED — simulated reports only", "Unit positions: MANUAL / SEEDED"). **Decision chain** with 7 pending stages, mission "NOT STARTED" and the hint "Start the mission". Map with the dashed **mission area** rectangle, 3 DEMO threat zones, unit and evidence markers | `GET /api/cop` every 10 s, `GET /api/system/status`. The rectangle is the road-graph extent from `GET /api/geo/coverage`. The chain is derived from backend records only |
+| 2 | **Active Mission → START MISSION** | Blue route with **Mission origin / Mission destination** markers. Panel: **ACTIVE**, 6.9 km · 17 min, "Hazard (heuristic): LOW (36.4) · partial data, up to 96.4 · confidence LIMITED". Log: "Mission route planned and monitoring started". Chain header: Mission ACTIVE | `GET /api/route` (threat-aware shortest path on the OSM graph), then `POST /api/route-monitor/register` (persisted). With weather unknown the score keeps an explicit upper bound instead of being re-weighted |
+| 3 | **SIMULATE SENSOR REPORT** | Toast "SIMULATED report → threat … (CRITICAL); mission route INVALIDATED". Route turns **red**; a new CRITICAL zone appears on it. **Threat assessment** card: SIMULATED, severity CRITICAL, Road Flooding, radius 75 m, confidence MEDIUM, source SIMULATED_REPORT, timestamp, evidence `EVD-…` (SENSOR SIM-WLS-07), "Source-declared confidence 80% (fixed by the simulation profile, not measured)", and the rule text. **Why the route is INVALIDATED** box quotes the persisted reason. Chain: ✓ Observation received (SIMULATED) → ✓ Evidence linked → ✓ Threat identified → red Route impact assessed (INVALIDATED) | `POST /api/simulation/field-report` creates evidence (`provenance.is_simulation=true`) and a linked threat at the route's midpoint. Confidence MEDIUM comes from the single-source rule (≥ 0.5 → MEDIUM, never HIGH). The route monitor reassesses: CRITICAL = hard exclusion (radius + 25 m buffer) → INVALIDATED, with the threat id in the reason |
+| 4 | Nothing (proposal appears in about 15 s) | **Dashed green** alternative on the map. Comparison at the top of Active Mission: distance 6.9 → 7.9 km, time 17 → 21 min, hazard 36.4 → 30.7, threat zones crossed 1 → 0. "Trade-off: +1.0 km, +4 min to cross 0 instead of 1 known threat zone(s)", the engine's rationale, and "not a guarantee that the road is safe". **APPROVE / REJECT** buttons. Chain: ✓ Alternative generated, Operator decision "Awaiting approve / reject" | `POST /api/route-monitor/{id}/replacement/recommend`. The threat-aware engine excludes blocking zones; metrics come from the backend for both routes |
+| 5 | **REJECT** | Toast "Replacement route rejected by operator — route remains compromised". Proposal disappears; log "Operator REJECTED the alternative (Rejected by operator)". Chain: Operator decision REJECTED (amber) | `…/replacement/reject` persists the decision and reason. Status stays INVALIDATED |
 | 6 | **COMPUTE ALTERNATIVE ROUTE** | Same proposal again (deterministic) | New persisted recommendation |
-| 7 | **APPROVE** | Status **REPLACED**; the route on the map is now the green alternative (7.9 km · 21 min); log "Operator APPROVED the alternative" and "INVALIDATED → REPLACED"; **OPERATOR DECISION RECORDED** box. Chain: all 7 steps ✓ | `…/replacement/approve` swaps the monitored route's nodes and records the transition |
+| 7 | **APPROVE** | Status **REPLACED**; the route on the map is now the green alternative (7.9 km · 21 min); log "Operator APPROVED the alternative" and "INVALIDATED → REPLACED"; **Operator decision recorded** box. Chain: all 7 stages ✓, impact shown as "INVALIDATED (resolved)" | `…/replacement/approve` swaps the monitored route's nodes and records the transition |
 | 8 | Reload the page (F5) | Same REPLACED mission and the full log | Everything shown is read back from SQLite |
 | 9 | **INCIDENTS** tab, select the SIMULATED threat | "Official Warning: None linked", "Severity score 80/100 (fixed per severity level, not a calibrated risk)", **LINKED EVIDENCE RECORDS** with the SIMULATED badge | `GET /api/evidence?threat_id=…` |
 | 10 | *(optional)* **GENERATE RESPONSE PLAN → APPROVE RESPONSE PLAN → RECORD SIMULATED DISPATCH** | Matched resources with distance-based match scores; after dispatch the action is DISPATCHED and the incident timeline gains "SIMULATED_DISPATCH" | Response-plan endpoints. The backend replies "SIMULATED RESPONSE. NO REAL RESOURCE HAS BEEN DISPATCHED." |
@@ -116,17 +116,30 @@ reports a SIMULATED CRITICAL washout on the access road, with linked SIMULATED
 evidence. The Active Mission panel follows the newest mission. Within 10 s it shows
 "Mission: (15.3647, 75.1240) → (15.3531, 75.0932)". Then:
 
-1. **CHECK ROUTE** → INVALIDATED; the reason names the washout threat.
+1. The route is already INVALIDATED: recording the washout re-checked it automatically,
+   and the reason names the washout threat. CHECK ROUTE is not needed.
 2. **COMPUTE ALTERNATIVE ROUTE** → "No safe alternative exists: every path to the
    destination crosses a CRITICAL zone."
-   - Chain: ✕ ALTERNATIVE PROPOSED — No safe route exists.
+   - Chain: Alternative generated — "No safe route exists" (red).
+   - If the rain scenario was run earlier, its incidents can already cover the route
+     at registration; the panel then says "INVALIDATED since registration" and lists
+     the zones it currently crosses.
    - There is no APPROVE button and no invented route.
 
-Backend result: `NO_SAFE_AVAILABLE_ROUTE`; no recommendation is persisted. The same
-case is covered by
+Backend result: `NO_SAFE_AVAILABLE_ROUTE`. No recommendation is created, but the
+attempt is saved in the mission record. After a reload the chain still shows "No safe
+route exists", and the log has "Alternative search: no safe route exists (blocked by
+THREAT-…)". The same case is covered by
 `backend/tests/test_mission_workflow.py::test_no_safe_alternative_is_reported_honestly`.
-Because the result is not persisted, after a reload the chain shows "No proposal on
-record" until you recompute.
+
+### Automatic re-check from an external client (optional)
+
+After the main story, run
+`.venv/bin/python scripts/demo/post_external_report.py --at 0.5`.
+- **What it is:** a test client that posts a SIMULATED evidence record and a linked
+  CRITICAL threat on the newest mission route, through the public API.
+- **What happens:** within ~10 s, with no click, the route turns INVALIDATED. The log
+  shows "… (automatic re-check)".
 
 Run this at the end of the demo, or on a fresh database: the convoy mission is no
 longer the newest one afterwards.

@@ -113,11 +113,14 @@ def submit_simulated_report(route_id: str, profile_name: str = "ROAD_FLOODING_SE
                      f"Confidence rule: {CONFIDENCE_RULE}"),
         source="SIMULATED_REPORT",
         evidence_references=[evidence["evidence_id"]],
-    ))
+    ), reassess_routes=False)
     evidence = evidence_service.associate_evidence_with_threat(evidence["evidence_id"], threat["incident_id"])
     threat = threat_service.get_threat(threat["incident_id"])  # canonical shape (category, etc.)
 
-    assessment = route_monitor_service.reassess_route(route_id)
+    # Link first, then reassess every monitored route once (the mission route's
+    # result is returned; other routes the zone touches are updated too).
+    assessment = route_monitor_service.reassess_all(trigger="SIMULATED_REPORT").get(route_id) \
+        or route_monitor_service.reassess_route(route_id, trigger="SIMULATED_REPORT")
 
     return {
         "status": "success",

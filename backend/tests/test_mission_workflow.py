@@ -160,4 +160,9 @@ def test_no_safe_alternative_is_reported_honestly():
     rec = client.post(f"/api/route-monitor/{route_id}/replacement/recommend").json()
     assert rec["replacement_status"] == "NO_SAFE_AVAILABLE_ROUTE"
     assert "recommendation_id" not in rec
-    assert client.get(f"/api/route-monitor/{route_id}").json()["recommendations"] == []
+    detail = client.get(f"/api/route-monitor/{route_id}").json()
+    assert detail["recommendations"] == []
+    # The honest failure is part of the mission record (survives a reload).
+    attempts = detail["replacement_attempts"]
+    assert [a["outcome"] for a in attempts] == ["NO_SAFE_AVAILABLE_ROUTE"]
+    assert attempts[0]["message"] and attempts[0]["timestamp"]

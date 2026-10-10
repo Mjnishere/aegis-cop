@@ -1,10 +1,36 @@
+import re
 import uuid
 import datetime
+from typing import Optional
 
 from .route_monitor_service import route_monitor_service
 from .routing_service import routing_service, NoSafeRouteError
 from app.repositories.route_recommendation_repository import route_recommendation_repository
 from .weather_adapter import weather_adapter
+
+DEFAULT_ACTOR = "EOC operator"
+# Operator names are SELF-DECLARED: there is no authentication in this prototype.
+ACTOR_BASIS = "SELF_DECLARED_NOT_AUTHENTICATED"
+_MAX_ACTOR = 80
+_MAX_REASON = 500
+
+
+def _clean_text(value, limit: int) -> Optional[str]:
+    """Single-line, control-character-free, length-limited text, or None if empty."""
+    if value is None:
+        return None
+    text = re.sub(r"[\x00-\x1f\x7f]+", " ", str(value))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:limit] or None
+
+
+def clean_actor(value) -> str:
+    return _clean_text(value, _MAX_ACTOR) or DEFAULT_ACTOR
+
+
+def clean_reason(value) -> Optional[str]:
+    return _clean_text(value, _MAX_REASON)
+
 
 class RouteReplacementService:
     def __init__(self):
@@ -47,6 +73,8 @@ class RouteReplacementService:
                 hazard_aware=True
             )
         except NoSafeRouteError as e:
+            self._record_attempt(route_id, "NO_SAFE_AVAILABLE_ROUTE", str(e),
+                                 blocking_threat_ids=list(e.blocking_threat_ids or []))
             return {
                 "status": "success",
                 "route_id": route_id,
@@ -54,14 +82,17 @@ class RouteReplacementService:
                 "message": str(e),
                 "blocking_threat_ids": e.blocking_threat_ids,
                 "blocked_hazard_edges": e.blocked_hazard_edges,
+                "attempt_recorded": True,
             }
         except Exception as e:
             if "No route exists" in str(e):
+                self._record_attempt(route_id, "NO_ROUTE", "No alternative path exists.")
                 return {
                     "status": "success",
                     "route_id": route_id,
                     "replacement_status": "NO_ROUTE",
-                    "message": "No alternative path exists."
+                    "message": "No alternative path exists.",
+                    "attempt_recorded": True,
                 }
             return {
                 "status": "error",
@@ -69,11 +100,13 @@ class RouteReplacementService:
             }
 
         if not candidate.get("route_nodes"):
+            self._record_attempt(route_id, "NO_ROUTE", "No alternative path exists.")
             return {
                 "status": "success",
                 "route_id": route_id,
                 "replacement_status": "NO_ROUTE",
-                "message": "No alternative path exists."
+                "message": "No alternative path exists.",
+                "attempt_recorded": True,
             }
 
         old_summary = route_record["current_hazard_summary"]
@@ -121,6 +154,8 @@ class RouteReplacementService:
                 "reason": reason,
                 "created_at": now
             })
+        else:
+            self._record_attempt(route_id, replacement_status, reason, timestamp=now)
 
         audit_event = {
             "recommendation_id": rec_id if replacement_status == "RECOMMENDATION_READY" else None,
@@ -184,7 +219,17 @@ class RouteReplacementService:
             
         return res
 
-    def approve_replacement(self, route_id: str, recommendation_id: str, actor: str = "EOC operator") -> dict:
+    def _record_attempt(self, route_id: str, outcome: str, message: str, timestamp: Optional[str] = None, **extra) -> None:
+        route_monitor_service.record_replacement_attempt(route_id, {
+            "timestamp": timestamp or datetime.datetime.now().isoformat(),
+            "outcome": outcome,
+            "message": message,
+            **extra,
+        })
+
+    def approve_replacement(self, route_id: str, recommendation_id: str, actor: str = DEFAULT_ACTOR,
+                            reason: Optional[str] = None) -> dict:
+        actor, reason = clean_actor(actor), clean_reason(reason)
         rec = route_recommendation_repository.get_by_id(recommendation_id)
         if not rec or rec["route_id"] != route_id:
             return {"status": "error", "message": "Recommendation not found or mismatch"}
@@ -193,7 +238,7 @@ class RouteReplacementService:
             return {"status": "error", "message": f"Recommendation is already {rec['status']}"}
 
         now = datetime.datetime.now().isoformat()
-        rec.update({"status": "APPROVED", "decided_at": now, "decided_by": actor})
+        rec.update({"status": "APPROVED", "decided_at": now, "decided_by": actor, "decision_reason": reason})
         route_recommendation_repository.save(rec)
 
         # Apply the replacement
@@ -204,7 +249,9 @@ class RouteReplacementService:
             "route_id": route_id,
             "timestamp": now,
             "action": "APPROVED",
-            "actor": actor
+            "actor": actor,
+            "actor_basis": ACTOR_BASIS,
+            "reason": reason,
         }
         self._audit_log.append(audit_event)
         
@@ -216,7 +263,8 @@ class RouteReplacementService:
             "audit_event": audit_event
         }
 
-    def reject_replacement(self, route_id: str, recommendation_id: str, reason: str, actor: str = "EOC operator") -> dict:
+    def reject_replacement(self, route_id: str, recommendation_id: str, reason: str, actor: str = DEFAULT_ACTOR) -> dict:
+        actor, reason = clean_actor(actor), clean_reason(reason) or "Operator rejected recommendation"
         rec = route_recommendation_repository.get_by_id(recommendation_id)
         if not rec or rec["route_id"] != route_id:
             return {"status": "error", "message": "Recommendation not found or mismatch"}
@@ -234,6 +282,7 @@ class RouteReplacementService:
             "timestamp": now,
             "action": "REJECTED",
             "actor": actor,
+            "actor_basis": ACTOR_BASIS,
             "reason": reason
         }
         self._audit_log.append(audit_event)

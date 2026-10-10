@@ -64,9 +64,9 @@ Local data: data/osm/hubballi_dharwad_drive.graphml (tracked, ODbL)
 | | | `POST /api/route-monitor/register` | Monitored route persisted with status ACTIVE and a hazard summary |
 | 2 | SIMULATE SENSOR REPORT | `POST /api/simulation/field-report {route_id, profile}` | `simulated_report.submit_simulated_report` does four things. (a) It creates evidence at the route midpoint with `provenance.is_simulation=true` and `confidence_basis=DECLARED_BY_SIMULATION_PROFILE`. (b) It creates a threat (`source=SIMULATED_REPORT`, title prefixed `SIMULATED:`) whose `evidence_references` point to that evidence. (c) It associates the evidence with the threat. (d) It reassesses the route. |
 | 3 | (automatic) | — | Threat confidence comes from the single-source rule: declared ≥ 0.5 → MEDIUM, otherwise LOW, never HIGH |
-| 4 | (automatic) | — | Route segments within radius + 25 m of an active CRITICAL zone → INVALIDATED. The transition is persisted, and its reason contains the threat id |
-| 5 | (automatic) or COMPUTE ALTERNATIVE ROUTE | `POST /api/route-monitor/{id}/replacement/recommend` | Path that excludes blocking zones. Returns `RECOMMENDATION_READY` (persisted as PENDING) or `NO_SAFE_AVAILABLE_ROUTE` / `NO_ROUTE` / `NO_BETTER_ROUTE` (not persisted) |
-| 6 | APPROVE / REJECT | `…/replacement/approve` / `…/replacement/reject` | Recommendation APPROVED/REJECTED with time, actor and reason. Approval swaps the route nodes and records INVALIDATED → REPLACED |
+| 4 | (automatic) | — | Route segments within radius + 25 m of an active CRITICAL zone → INVALIDATED. The transition is persisted, and its reason contains the threat id. Every monitored route is re-checked like this whenever any threat is created, updated or closed (`route_monitor_service.reassess_all`, `trigger: THREAT_CHANGE`), not only the mission that reported it |
+| 5 | (automatic) or COMPUTE ALTERNATIVE ROUTE | `POST /api/route-monitor/{id}/replacement/recommend` | Path that excludes blocking zones. Returns `RECOMMENDATION_READY` (persisted as PENDING) or `NO_SAFE_AVAILABLE_ROUTE` / `NO_ROUTE` / `NO_BETTER_ROUTE` (no recommendation; the attempt is persisted in the route's `replacement_attempts`) |
+| 6 | APPROVE / REJECT (with a typed name and reason) | `…/replacement/approve` / `…/replacement/reject` (`actor`, `reason`) | Recommendation APPROVED/REJECTED with time, self-declared actor and reason. Approval swaps the route nodes and records INVALIDATED → REPLACED |
 | 7 | (polling) | `GET /api/route-monitor/{id}`, `GET /api/cop` | Mission log and decision chain are rebuilt from transitions and recommendations |
 
 Other observation entry points use the same pipeline:
@@ -82,8 +82,8 @@ Other observation entry points use the same pipeline:
   - The active mission is the most recently created monitored route.
   - The decision chain, mission log, map styling and incident desk are all derived from
     backend responses.
-- One exception: a `NO_SAFE_AVAILABLE_ROUTE` result is shown when it is computed but is
-  **not persisted**, so after a reload it is shown again only when recomputed.
+- Replacement searches that produce no recommendation (e.g. `NO_SAFE_AVAILABLE_ROUTE`)
+  are persisted as `replacement_attempts` on the route, so they survive a reload.
 
 ## 5. Routing and threat policy
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Icon from './ui/Icon';
 import { API_BASE_URL } from '../config';
 
 export default function IncidentCenter({ onClose, sharedSelectedIncident, onSelectIncident }) {
@@ -94,7 +95,10 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
       setScanStep('SCAN COMPLETE');
       await fetchIncidents();
 
-      showToast("Incident scan complete (rules applied to available weather/terrain data).", "success");
+      const created = (data.new_incidents || []).length;
+      showToast(data.source === 'BUILT_IN_DEMO_REGIONS'
+        ? `No regional risk feed is configured: ${created} DEMO incident(s) created from the built-in region list (fixtures, not detections).`
+        : `Regional risk feed scanned: ${created} new incident(s).`, "success");
       setTimeout(() => setScanStep(null), 2000);
     } catch (err) {
       showToast("Error scanning incidents: " + err.message, "error");
@@ -183,7 +187,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#F5F7FA] text-slate-900 p-4 space-y-4 overflow-hidden">
+    <div className="h-full flex flex-col bg-canvas text-slate-900 p-4 space-y-4 overflow-hidden">
       
       {/* Toast Notification Banner */}
       {toastMessage && (
@@ -196,18 +200,16 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm shrink-0">
+      <div className="panel px-4 py-3 flex flex-wrap gap-3 justify-between items-center shrink-0">
         <div>
-          <h1 className="text-base font-extrabold tracking-tight text-[#0B4F8A] uppercase flex items-center gap-2">
-            <span>🚨</span> INCIDENT COMMAND & TRIAGE DESK
-          </h1>
-          <div className="text-xs font-bold text-slate-500 mt-0.5">● EOC INCIDENT MONITORING ENGINE</div>
+          <h1 className="text-[15px] font-semibold tracking-tight text-slate-900 flex items-center gap-2"><Icon name="alert" size={18} className="text-red-600" /> Incidents</h1>
+          <div className="text-[11px] text-slate-500 mt-0.5">Incident queue, linked evidence, response plans and status actions (dispatch is simulated)</div>
         </div>
         <div className="flex gap-2">
           <button
             onClick={handleScanForIncidents}
             disabled={!!scanStep}
-            className="px-4 py-2 bg-[#0B4F8A] hover:bg-[#083B68] text-white rounded text-xs font-bold shadow-sm transition disabled:opacity-50"
+            className="px-4 py-2 bg-accent hover:bg-accent-strong text-white rounded text-xs font-bold shadow-sm transition disabled:opacity-50"
           >
             {scanStep || 'SCAN FOR INCIDENTS'}
           </button>
@@ -223,8 +225,8 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
       <div className="flex gap-4 flex-1 overflow-hidden">
         
         {/* Left Queue */}
-        <div className="w-1/3 flex flex-col bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm">
-          <div className="flex justify-between items-center border-b border-[#D9E0E8] pb-2 mb-3">
+        <div className="w-1/3 flex flex-col bg-white p-4 rounded-md border border-line shadow-sm">
+          <div className="flex justify-between items-center border-b border-line pb-2 mb-3">
             <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
               INCIDENT QUEUE ({incidents.length})
             </h2>
@@ -237,7 +239,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
             <div className="text-xs text-slate-500 italic p-6 text-center border border-dashed border-slate-300 rounded">
               No active incidents detected.
               <br/>
-              <span className="text-[10px] text-[#0B4F8A] font-bold mt-1 block">Click 'SCAN FOR INCIDENTS' to assess feeds.</span>
+              <span className="text-[10px] text-accent font-bold mt-1 block">Click 'SCAN FOR INCIDENTS' to assess feeds.</span>
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
@@ -248,7 +250,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                     key={inc.incident_id}
                     onClick={() => selectInc(inc)}
                     className={`border rounded p-3 cursor-pointer transition ${
-                      isSel ? 'border-[#0B4F8A] bg-blue-50/80 ring-1 ring-[#0B4F8A]' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                      isSel ? 'border-accent bg-blue-50/80 ring-1 ring-accent' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-1">
@@ -257,12 +259,12 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                       }`}>
                         {inc.severity}
                       </span>
-                      <span className="text-[10px] font-bold text-[#0B4F8A] uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                      <span className="text-[10px] font-bold text-accent uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
                         {inc.status}
                       </span>
                     </div>
                     <p className="font-bold text-sm text-slate-900">{inc.title}</p>
-                    <p className="text-xs text-slate-600">📍 {inc.district}, {inc.state}</p>
+                    <p className="text-xs text-slate-600"><Icon name="pin" size={11} className="inline-block align-[-1px] mr-0.5" />{inc.district}, {inc.state}</p>
                     <div className="mt-2 text-[10px] text-slate-500 flex justify-between border-t border-slate-200 pt-1">
                       <span>Severity score: <strong className="text-red-700">{inc.risk_score}/100</strong></span>
                       <span>{inc.source}</span>
@@ -275,7 +277,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
         </div>
 
         {/* Right Details & Evidence Panel */}
-        <div className="w-2/3 flex flex-col bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm overflow-y-auto">
+        <div className="w-2/3 flex flex-col bg-white p-4 rounded-md border border-line shadow-sm overflow-y-auto">
           {!selectedIncident ? (
             <div className="text-slate-500 text-xs italic p-6 text-center border border-dashed border-slate-300 rounded">
               Select an incident from the queue to inspect details, evidence, and response actions.
@@ -284,7 +286,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
             <div className="space-y-4 text-xs">
               
               {/* Header */}
-              <div className="border-b border-[#D9E0E8] pb-3">
+              <div className="border-b border-line pb-3">
                 <div className="flex justify-between items-start">
                   <div>
                     <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase text-white ${
@@ -293,9 +295,9 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                       {selectedIncident.severity}
                     </span>
                     <h2 className="text-xl font-extrabold text-slate-900 mt-1">{selectedIncident.title}</h2>
-                    <p className="text-slate-600 font-medium">📍 Location: {selectedIncident.district}, {selectedIncident.state}</p>
+                    <p className="text-slate-600 font-medium"><Icon name="pin" size={11} className="inline-block align-[-1px] mr-0.5" />Location: {selectedIncident.district}, {selectedIncident.state}</p>
                   </div>
-                  <span className="text-xs font-bold text-[#0B4F8A] bg-blue-50 px-2.5 py-1 rounded border border-blue-200">
+                  <span className="text-xs font-bold text-accent bg-blue-50 px-2.5 py-1 rounded border border-blue-200">
                     STATUS: {selectedIncident.status}
                   </span>
                 </div>
@@ -304,14 +306,14 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
               {/* Evidence & Risk Breakdown */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-1">
-                  <p className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider mb-1">EVIDENCE & INTELLIGENCE</p>
+                  <p className="font-extrabold text-[10px] text-accent uppercase tracking-wider mb-1">EVIDENCE & INTELLIGENCE</p>
                   <p><b>Official Warning:</b> <span className="text-slate-800">{['NONE', 'NORMAL', null, undefined, ''].includes(selectedIncident.official_warning) ? 'None linked' : selectedIncident.official_warning}</span></p>
                   <p><b>Severity score:</b> <span className="text-red-700 font-mono font-bold">{selectedIncident.risk_score}/100</span> <span className="text-slate-500 text-[10px]">(fixed per severity level, not a calibrated risk)</span></p>
                   <p><b>Confidence:</b> <span className="text-slate-800">{selectedIncident.confidence}</span></p>
                   <p><b>Data Source:</b> <span className="text-slate-800">{selectedIncident.source}</span></p>
                 </div>
                 <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-1">
-                  <p className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider mb-1">SITUATION DESCRIPTION</p>
+                  <p className="font-extrabold text-[10px] text-accent uppercase tracking-wider mb-1">SITUATION DESCRIPTION</p>
                   <p className="text-slate-700">{selectedIncident.description}</p>
                   {selectedIncident.title.includes("DEMO") && (
                     <p className="mt-2 text-amber-900 font-bold text-[10px] bg-amber-50 p-1 rounded border border-amber-200">
@@ -351,7 +353,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
               {/* Incident Response Plan & Resource Assignment Section */}
               <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-3">
                 <div className="flex justify-between items-center border-b border-slate-200 pb-1.5">
-                  <p className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider">RESPONSE PLAN & RESOURCE COMMAND</p>
+                  <p className="font-extrabold text-[10px] text-accent uppercase tracking-wider">RESPONSE PLAN & RESOURCE COMMAND</p>
                   <span className="text-[10px] font-bold text-slate-600">PLAN INCIDENT ID: {selectedIncident.incident_id}</span>
                 </div>
 
@@ -393,7 +395,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                       <button
                         onClick={handleGeneratePlan}
                         disabled={planLoading}
-                        className="bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1.5 px-4 rounded text-xs shadow-sm disabled:opacity-50"
+                        className="bg-accent hover:bg-accent-strong text-white font-bold py-1.5 px-4 rounded text-xs shadow-sm disabled:opacity-50"
                       >
                         {planLoading ? 'GENERATING...' : 'GENERATE RESPONSE PLAN'}
                       </button>
@@ -434,7 +436,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                         <button
                           onClick={() => handleSimulatedDispatch(a)}
                           disabled={!!dispatching}
-                          className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1 rounded text-[11px] disabled:opacity-50"
+                          className="w-full bg-accent hover:bg-accent-strong text-white font-bold py-1 rounded text-[11px] disabled:opacity-50"
                         >
                           {dispatching === a.action_id ? 'RECORDING...' : 'RECORD SIMULATED DISPATCH'}
                         </button>
@@ -452,7 +454,7 @@ export default function IncidentCenter({ onClose, sharedSelectedIncident, onSele
                 <p className="font-extrabold text-[10px] text-slate-700 uppercase tracking-wider mb-2">OPERATOR STATUS ACTIONS</p>
                 <div className="flex gap-2">
                   {selectedIncident.status === 'DETECTED' && (
-                    <button onClick={() => handleAction(selectedIncident.incident_id, 'acknowledge')} className="bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1.5 px-3 rounded text-xs">
+                    <button onClick={() => handleAction(selectedIncident.incident_id, 'acknowledge')} className="bg-accent hover:bg-accent-strong text-white font-bold py-1.5 px-3 rounded text-xs">
                       ACKNOWLEDGE
                     </button>
                   )}

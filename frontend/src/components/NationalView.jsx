@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import MapAutoResize from './ui/MapAutoResize';
+import Icon from './ui/Icon';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -68,7 +70,7 @@ export default function NationalView() {
     fetchData();
   }, []);
 
-  if (loading) return <div className="p-4 bg-[#F5F7FA] text-slate-700 font-bold">Loading National Risk Intelligence...</div>;
+  if (loading) return <div className="p-4 bg-canvas text-slate-700 font-bold">Loading National Risk Intelligence...</div>;
 
   // Only backend regions are shown; no placeholder regions or scores are substituted.
   const regions = riskData?.regions || [];
@@ -86,22 +88,22 @@ export default function NationalView() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#F5F7FA] text-slate-900 p-4 font-sans overflow-hidden">
+    <div className="flex flex-col h-full bg-canvas text-slate-900 p-4 font-sans overflow-hidden">
       
       {/* Header Summary */}
-      <div className="mb-3 bg-white border border-[#D9E0E8] p-4 rounded-md shadow-sm shrink-0">
+      <div className="mb-3 panel px-4 py-3 shrink-0">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-base font-extrabold uppercase tracking-tight text-[#0B4F8A] flex items-center gap-2">
-              <span>🌐</span> NATIONAL EOC: RISK & EARTH OBSERVATION
-            </h1>
-            <p className="text-xs text-slate-500">National Flood Situation, Regional Assessments & Disaster Intelligence</p>
+            <h1 className="text-[15px] font-semibold tracking-tight text-slate-900 flex items-center gap-2"><Icon name="globe" size={18} className="text-accent" /> Regional Overview</h1>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Regional risk feed: <b className="text-slate-700">{riskData?.mode || (riskData ? 'unknown' : 'unreachable')}</b> · links to resources, incidents and the alert centre
+            </p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowResourceCenter(true)} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-1.5 px-3 rounded text-xs">
               OPEN RESOURCES
             </button>
-            <button onClick={() => setShowIncidentCenter(true)} className="bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1.5 px-3 rounded text-xs">
+            <button onClick={() => setShowIncidentCenter(true)} className="bg-accent hover:bg-accent-strong text-white font-bold py-1.5 px-3 rounded text-xs">
               OPEN INCIDENTS
             </button>
             <button onClick={() => setShowAlertCenter(true)} className="bg-red-700 hover:bg-red-800 text-white font-bold py-1.5 px-3 rounded text-xs">
@@ -123,8 +125,8 @@ export default function NationalView() {
         <div className="w-1/3 flex flex-col gap-3 overflow-y-auto">
           
           {/* Affected Areas Table */}
-          <div className="bg-white border border-[#D9E0E8] p-3.5 rounded-md shadow-sm">
-            <h2 className="font-extrabold text-xs uppercase tracking-wider text-[#0B4F8A] border-b border-[#D9E0E8] pb-2 mb-2">
+          <div className="bg-white border border-line p-3.5 rounded-md shadow-sm">
+            <h2 className="font-extrabold text-xs uppercase tracking-wider text-accent border-b border-line pb-2 mb-2">
               AFFECTED REGIONS DIRECTORY
             </h2>
             <div className="space-y-2">
@@ -141,7 +143,7 @@ export default function NationalView() {
                   key={r.id}
                   onClick={() => setSelectedRegionId(r.id)}
                   className={`p-2.5 rounded border text-xs cursor-pointer transition ${
-                    selectedRegion?.id === r.id ? 'bg-blue-50 border-[#0B4F8A] ring-1 ring-[#0B4F8A]' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                    selectedRegion?.id === r.id ? 'bg-blue-50 border-accent ring-1 ring-accent' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
                   <div className="flex justify-between items-center mb-1">
@@ -163,8 +165,8 @@ export default function NationalView() {
 
           {/* Region Operations Panel */}
           {selectedRegion && (
-            <div className="bg-white border border-[#D9E0E8] p-3.5 rounded-md shadow-sm space-y-3 text-xs">
-              <div className="border-b border-[#D9E0E8] pb-2">
+            <div className="bg-white border border-line p-3.5 rounded-md shadow-sm space-y-3 text-xs">
+              <div className="border-b border-line pb-2">
                 <h3 className="font-extrabold text-sm text-slate-900">REGION OPERATIONS: {selectedRegion.district}</h3>
                 <p className="text-slate-600">Risk Score: <strong className="text-red-700">{selectedRegion.risk.score}/100</strong></p>
               </div>
@@ -174,7 +176,7 @@ export default function NationalView() {
                 <p className="font-extrabold text-[10px] text-slate-500 uppercase">NATIONAL RESPONSE OPTIONS</p>
                 <button
                   onClick={() => handleIssueMunicipalNotification(selectedRegion)}
-                  className="w-full text-left bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#0B4F8A] p-2 rounded font-bold transition"
+                  className="w-full text-left bg-blue-50 hover:bg-blue-100 border border-blue-200 text-accent p-2 rounded font-bold transition"
                 >
                   ISSUE MUNICIPAL DRAINAGE ALERT
                 </button>
@@ -193,7 +195,7 @@ export default function NationalView() {
                       ...prev
                     ]);
                   }}
-                  className="w-full text-left bg-[#0B4F8A] hover:bg-[#083B68] text-white p-2 rounded font-bold transition"
+                  className="w-full text-left bg-accent hover:bg-accent-strong text-white p-2 rounded font-bold transition"
                 >
                   RECOMMEND NDRF RESPONSE SIMULATION
                 </button>
@@ -201,8 +203,8 @@ export default function NationalView() {
 
               {/* NDRF Simulation Panel */}
               {ndrfRecommendation && (
-                <div className="bg-[#0B4F8A]/5 border border-[#0B4F8A]/20 p-3 rounded space-y-2">
-                  <div className="font-bold text-[#0B4F8A] uppercase text-[10px] flex justify-between border-b border-[#0B4F8A]/10 pb-1">
+                <div className="bg-accent-soft border border-accent/20 p-3 rounded space-y-2">
+                  <div className="font-bold text-accent uppercase text-[10px] flex justify-between border-b border-accent/10 pb-1">
                     <span>NATIONAL NDRF RESPONSE SIMULATION</span>
                     <span className="text-emerald-700 font-bold">{ndrfRecommendation.status}</span>
                   </div>
@@ -220,7 +222,7 @@ export default function NationalView() {
                           ...prev
                         ]);
                       }}
-                      className="flex-1 bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-1.5 rounded text-[10px]"
+                      className="flex-1 bg-accent hover:bg-accent-strong text-white font-bold py-1.5 rounded text-[10px]"
                     >
                       START RESPONSE TRIP
                     </button>
@@ -240,7 +242,7 @@ export default function NationalView() {
                 <div className="space-y-1 max-h-28 overflow-y-auto font-mono text-[10px]">
                   {nationalAuditLog.map((item, idx) => (
                     <div key={idx} className="bg-white p-1 rounded border border-slate-200 text-slate-800">
-                      <span className="text-slate-500">[{item.time}]</span> <strong className="text-[#0B4F8A]">{item.event}</strong>: {item.details}
+                      <span className="text-slate-500">[{item.time}]</span> <strong className="text-accent">{item.event}</strong>: {item.details}
                     </div>
                   ))}
                 </div>
@@ -278,15 +280,17 @@ export default function NationalView() {
         </div>
 
         {/* Right Map Display (Standard OpenStreetMap Tiles) */}
-        <div className="w-2/3 bg-white border border-[#D9E0E8] rounded-md overflow-hidden shadow-sm relative">
+        <div className="w-2/3 bg-white border border-line rounded-md overflow-hidden shadow-sm relative">
           <MapContainer
             center={[selectedRegion?.latitude || 15.4589, selectedRegion?.longitude || 75.0078]}
             zoom={selectedRegionId ? 11 : 7}
             className="h-full w-full"
           >
+            <MapAutoResize />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="basemap-tiles"
             />
 
             {validRegions.map(r => (

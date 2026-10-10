@@ -60,15 +60,22 @@ pieces into one auditable workflow on a shared map.
    and recommendation decisions, and it survives a page reload and a backend restart.
 
 The Overview shows this chain at a glance:
-- **Decision chain bar:** the seven steps — MISSION ACTIVE → OBSERVATION RECEIVED →
-  THREAT LINKED → ROUTE IMPACTED → ALTERNATIVE PROPOSED → OPERATOR DECISION → ROUTE
-  REPLACED — each with its time and status. It also says what the operator should do
-  next.
-- **Data sources strip:** what is live, simulated, unavailable or only last known
+- **Operational summary:** counts from the COP summary (active threats, monitored and
+  compromised routes, active evidence) plus decisions awaiting the operator, next to
+  data-source availability — what is live, simulated, unavailable or only last known
   (backend, road graph, terrain, weather, sensor feeds, unit positions).
+- **Decision chain:** a seven-stage stepper — Observation received → Evidence linked →
+  Threat identified → Route impact assessed → Alternative generated → Operator decision
+  → Outcome recorded — each with its recorded time and state (complete, awaiting
+  action, adverse result, needs attention, pending, unknown). It also says what the
+  operator should do next.
 - **Active Mission panel:** why the route was invalidated, the current-versus-proposed
   comparison with the trade-off, the engine's rationale, and APPROVE/REJECT.
-- **Evidence card:** the evidence linked to whichever threat is selected.
+- **Threat queue and evidence card:** the active threats; selecting one shows its linked
+  evidence and the threat record's timeline.
+- **Themes:** dark (default), light or system, chosen in the header. The layout adapts
+  from wide desktop down to tablet width (the sidebar collapses to an icon rail below
+  1280 px, and the map moves to the top).
 
 The rest of the dashboard comes from the ResilienceRoute base and is reached from the
 left navigation. Simulated parts are labelled as such:
@@ -89,7 +96,7 @@ database, with outbound network calls blocked. That is why weather shows as
 |---|---|
 | ![Overview before the mission](docs/screenshots/01-overview-before-mission.png) Overview: data sources, empty decision chain, demo threats | ![Alternative approved](docs/screenshots/03-alternative-approved.png) Alternative approved: every chain step complete, route REPLACED |
 | ![No safe route](docs/screenshots/06-no-safe-route.png) Dead-end mission: "No safe alternative exists", no route invented | ![Backend unreachable](docs/screenshots/05-backend-unreachable-stale.png) Backend down: UNREACHABLE, STALE snapshot, chain steps "unknown" |
-| ![Incident desk](docs/screenshots/04-incident-linked-evidence.png) Incident desk with linked SIMULATED evidence | |
+| ![Incident desk](docs/screenshots/04-incident-linked-evidence.png) Incident desk with linked SIMULATED evidence | ![Light theme](docs/screenshots/07-light-theme.png) Same mission state in the light theme |
 
 ## Architecture
 
@@ -187,9 +194,9 @@ cd backend && ../.venv/bin/python -m pytest      # offline, temp SQLite, sockets
 cd frontend && npm run lint && npm run build
 ```
 
-- Last recorded run (2026-10-10) with the DEM present: 130 passed.
-- Without the DEM: 103 passed, 27 skipped with reasons. Without the DEM and the road
-  graph: 66 passed, 64 skipped.
+- Last recorded run (2026-10-10) with the DEM present: 137 passed.
+- Without the DEM: 110 passed, 27 skipped with reasons. Without the DEM and the road
+  graph: 68 passed, 69 skipped.
 - `tests/test_mission_workflow.py` covers:
   - report → evidence + threat → INVALIDATED;
   - reject, then approve;
@@ -218,7 +225,11 @@ cd frontend && npm run lint && npm run build
   analysis is a filename-keyword mock. Drainage data is synthetic.
 - **Single-point weather.** Weather is sampled at one point for the whole city.
 - **Partial terrain coverage.** About 12.6% of the road graph lies outside the DEM tile.
-- **No security layer.** There is no authentication. Bind the API to `127.0.0.1`.
+- **No security layer.** There is no authentication: decisions record a self-declared
+  operator name and reason. Bind the API to `127.0.0.1`.
+- **No detection.** Threats are recorded, not detected: simulated reports, API clients,
+  demo fixtures (the incident scan uses a built-in demo region list when no regional
+  feed is configured).
 - **Unproven portability.** Behaviour is only tested on Hubballi-Dharwad, so regional
   portability is not demonstrated.
 

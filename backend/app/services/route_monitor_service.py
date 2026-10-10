@@ -1,6 +1,7 @@
 import datetime
+import logging
 import uuid
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Iterable, List, Optional
 
 from .road_hazard_service import road_hazard_service
 from .routing_service import routing_service
@@ -11,6 +12,8 @@ from app.repositories.monitored_route_repository import monitored_route_reposito
 from app.repositories.route_recommendation_repository import route_recommendation_repository
 
 _STATUS_RANK = {"ACTIVE": 0, "AT_RISK": 1, "INVALIDATED": 2}  # REPLACED/unknown rank as 0
+
+logger = logging.getLogger(__name__)
 
 
 class RouteMonitorService:
@@ -144,7 +147,7 @@ class RouteMonitorService:
                 radius_m=float(obstruction.get("radius_m", 50.0)),
                 description=reason,
                 source="CONTROLLED_DEMO" if obstruction.get("simulated") else "OPERATOR_REPORT",
-            ))
+            ), reassess_routes=False)
             threat_id = threat["incident_id"]
 
         now = datetime.datetime.now().isoformat()
@@ -160,6 +163,9 @@ class RouteMonitorService:
         record["monitor_status"] = "INVALIDATED"
         record["last_checked_at"] = now
         self._persist_route(record)
+        if threat_id:
+            # The new obstruction zone may also affect other monitored routes.
+            self.reassess_all(trigger="THREAT_CHANGE", exclude=[route_id])
 
         return {
             "status": "success",
@@ -235,13 +241,44 @@ class RouteMonitorService:
             "estimated_time_s": record.get("estimated_time_s"),
             "transitions": record.get("transitions") or [],
             "recommendations": route_recommendation_repository.list_for_route(route_id),
+            # Replacement searches that produced no recommendation (e.g. no safe route).
+            "replacement_attempts": record.get("replacement_attempts") or [],
         }
         if warning:
             res["warning"] = warning
 
         return res
         
-    def reassess_route(self, route_id: str) -> dict:
+    def reassess_all(self, trigger: str = "THREAT_CHANGE", exclude: Optional[Iterable[str]] = None) -> Dict[str, dict]:
+        """Reassess every monitored route after the threat picture changed.
+
+        Called when a threat is created, updated or closed, so a new zone on a route
+        invalidates it without waiting for a manual check. A failure on one route is
+        logged and reported, never allowed to block recording the threat itself.
+        """
+        self._load_from_db()
+        skip = set(exclude or [])
+        results: Dict[str, dict] = {}
+        for route_id in list(self._monitored_routes):
+            if route_id in skip:
+                continue
+            try:
+                results[route_id] = self.reassess_route(route_id, trigger=trigger)
+            except Exception as exc:  # noqa: BLE001 - isolate per-route failures
+                logger.warning("Automatic reassessment of route %s failed: %s", route_id, exc)
+                results[route_id] = {"status": "error", "route_id": route_id, "message": str(exc)}
+        return results
+
+    def record_replacement_attempt(self, route_id: str, attempt: dict) -> None:
+        """Persist a replacement search that produced no recommendation."""
+        self._load_from_db()
+        record = self._monitored_routes.get(route_id)
+        if record is None:
+            return
+        record["replacement_attempts"] = list(record.get("replacement_attempts") or []) + [attempt]
+        self._persist_route(record)
+
+    def reassess_route(self, route_id: str, trigger: str = "CHECK") -> dict:
         self._load_from_db()
         if route_id not in self._monitored_routes:
             return {"status": "not_found"}
@@ -251,6 +288,10 @@ class RouteMonitorService:
         
         # Reassess with current environment and active threats
         curr_status, summary = self._evaluate_route(record["route_nodes"])
+        # An approved replacement that is still clear stays REPLACED: "still clear" is
+        # not a new event and must not be logged as hazards having dropped.
+        if prev_status == "REPLACED" and curr_status == "ACTIVE":
+            curr_status = "REPLACED"
         # A manual invalidation stays in force until a replacement is approved;
         # improving hazard readings alone do not clear an operator's report.
         manual_retained = self.is_manually_invalidated(record) and curr_status != "INVALIDATED"
@@ -297,7 +338,8 @@ class RouteMonitorService:
                 "new_status": curr_status,
                 "highest_segment_score": summary["highest_segment_score"],
                 "environmental_mode": mode_label,
-                "reason": reason
+                "reason": reason,
+                "trigger": trigger,
             })
             
         self._persist_route(record)
@@ -321,6 +363,14 @@ class RouteMonitorService:
         
         if reason:
             res["reason"] = reason
+        elif curr_status in ("INVALIDATED", "AT_RISK"):
+            # Unchanged but compromised (e.g. already invalidated automatically when the
+            # threat was recorded): report the stored reason for the current status.
+            last = next((t for t in reversed(record.get("transitions") or [])
+                         if t.get("new_status") == curr_status), None)
+            if last and last.get("reason"):
+                res["reason"] = last["reason"]
+                res["reason_recorded_at"] = last.get("timestamp")
             
         if curr_status == "INVALIDATED":
             res["route_replacement_required"] = True

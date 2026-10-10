@@ -55,8 +55,11 @@ class IncidentService:
         risk_data = national_risk_service.get_national_risk()
         regions = risk_data.get("regions", [])
 
-        # Fallback to controlled demo regions if risk engine returns no active regions
-        if not regions:
+        # No regions from the risk feed (e.g. IMD access not configured) -> fall back to a
+        # built-in list of DEMO regions. Those are fixtures, not detections: they are
+        # labelled DEMO, carry no official warning, and say so in their timeline.
+        from_fallback = not regions
+        if from_fallback:
             regions = [
                 {
                     "state": "Karnataka", "district": "Gokul Road Corridor", "city": "Hubballi",
@@ -128,7 +131,7 @@ class IncidentService:
 
         for region in regions:
             rr_level = region.get("risk", {}).get("level", "NORMAL").upper()
-            imd_level = region.get("official_warning", {}).get("level", "NORMAL").upper()
+            imd_level = "NONE" if from_fallback else region.get("official_warning", {}).get("level", "NORMAL").upper()
             
             if rr_level in ["CRITICAL", "HIGH"] or imd_level in ["CRITICAL", "HIGH"]:
                 state = region["state"]
@@ -161,6 +164,11 @@ class IncidentService:
                         updated_incidents.append(existing_inc.incident_id)
                 else:
                     title = region.get("title") or f"DEMO INCIDENT: {hazard_type} in {district}"
+                    if from_fallback and not title.upper().startswith("DEMO"):
+                        title = f"DEMO: {title}"
+                    description = region.get("description") or "Automated risk detection based on controlled flood scenario precipitation and drainage runoff."
+                    if from_fallback:
+                        description += " (Built-in demo region: the regional risk feed is not configured, so this is a fixture, not a detection.)"
                     inc = Incident(
                         title=title,
                         hazard_type=hazard_type,
@@ -175,18 +183,29 @@ class IncidentService:
                         official_warning=imd_level,
                         confidence=confidence,
                         source="CONTROLLED_DEMO",
-                        description=region.get("description") or "Automated risk detection based on controlled flood scenario precipitation and drainage runoff."
+                        description=description
                     )
                     self.incidents[inc.incident_id] = inc
-                    self._add_timeline(inc, "INCIDENT_CREATED", "Incident detected by Risk Engine", "RISK_ENGINE", "SYSTEM")
+                    if from_fallback:
+                        self._add_timeline(inc, "INCIDENT_CREATED",
+                                           "DEMO incident created from the built-in region list (no regional risk feed configured; not a detection)",
+                                           "DEMO_FIXTURE", "SYSTEM")
+                    else:
+                        self._add_timeline(inc, "INCIDENT_CREATED", "Incident created by the risk engine from the regional risk feed", "RISK_ENGINE", "SYSTEM")
                     self._log_audit("SYSTEM", "SYSTEM", "INCIDENT_CREATED", inc.incident_id, "SUCCESS")
                     self._persist_incident(inc)
                     new_incidents.append(inc.incident_id)
 
+        if new_incidents or updated_incidents:
+            # New or changed incidents are threat zones too.
+            from app.services.threat.threat_service import reassess_monitored_routes
+            reassess_monitored_routes()
+
         return {
             "status": "success",
             "new_incidents": new_incidents,
-            "updated_incidents": updated_incidents
+            "updated_incidents": updated_incidents,
+            "source": "BUILT_IN_DEMO_REGIONS" if from_fallback else "REGIONAL_RISK_FEED",
         }
 
     def get_all(self, state: str = None, status: str = None) -> List[Dict[str, Any]]:
@@ -220,6 +239,9 @@ class IncidentService:
         self._add_timeline(inc, "STATUS_UPDATED", f"Status changed from {old_status} to {new_status}", "OPERATOR", actor)
         self._log_audit(actor, role, "INCIDENT_UPDATED", incident_id, f"SUCCESS: Status={new_status}")
         self._persist_incident(inc)
+        # A resolved incident stops being a threat zone; reassess monitored routes.
+        from app.services.threat.threat_service import reassess_monitored_routes
+        reassess_monitored_routes()
         return {"status": "success", "incident": inc.dict()}
 
     def link_alert(self, incident_id: str, alert_id: str, actor: str = "SYSTEM"):

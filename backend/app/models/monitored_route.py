@@ -21,3 +21,5 @@ class MonitoredRouteModel(Base):
     monitor_status: Mapped[str] = mapped_column(String(50), nullable=False, default="ACTIVE")
     transitions: Mapped[list] = mapped_column(JSON, default=list)
     previous_route_nodes: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Replacement searches that produced no recommendation (e.g. NO_SAFE_AVAILABLE_ROUTE).
+    replacement_attempts: Mapped[list] = mapped_column(JSON, default=list)

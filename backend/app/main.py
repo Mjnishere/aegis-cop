@@ -306,7 +306,8 @@ def approve_replacement(route_id: str, payload: dict):
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Missing recommendation_id or approved flag")
         
-    res = route_replacement_service.approve_replacement(route_id, rec_id)
+    res = route_replacement_service.approve_replacement(
+        route_id, rec_id, actor=payload.get("actor"), reason=payload.get("reason"))
     if res.get("status") == "error":
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=res.get("message"))
@@ -319,7 +320,8 @@ def reject_replacement(route_id: str, payload: dict):
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Missing recommendation_id")
         
-    res = route_replacement_service.reject_replacement(route_id, rec_id, payload.get("reason", "Operator rejected recommendation"))
+    res = route_replacement_service.reject_replacement(
+        route_id, rec_id, payload.get("reason"), actor=payload.get("actor"))
     if res.get("status") == "error":
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=res.get("message"))

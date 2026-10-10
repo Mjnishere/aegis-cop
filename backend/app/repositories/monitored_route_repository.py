@@ -48,7 +48,8 @@ class MonitoredRouteRepository:
             "current_hazard_summary": rec.current_hazard_summary or {},
             "monitor_status": rec.monitor_status,
             "transitions": rec.transitions or [],
-            "previous_route_nodes": rec.previous_route_nodes
+            "previous_route_nodes": rec.previous_route_nodes,
+            "replacement_attempts": rec.replacement_attempts or [],
         }
 
 monitored_route_repository = MonitoredRouteRepository()

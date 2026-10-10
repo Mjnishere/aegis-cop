@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import MapAutoResize from './ui/MapAutoResize';
+import Icon from './ui/Icon';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, Circle, GeoJSON, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -247,11 +249,11 @@ export default function MapComponent({
       
       {/* FLOATING COMPACT ROUTE SEARCH PANEL (TOP LEFT OF MAP) */}
       {!showSatellite && (
-        <div className="absolute top-3 left-3 z-[1000] transition-all duration-200 max-w-sm">
+        <div className="absolute top-3 left-14 z-[1000] transition-all duration-200 max-w-sm">
           {collapsed ? (
             <div className="bg-white border border-slate-300 shadow-md rounded-lg p-2 flex items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 truncate">
-                <span className="w-2 h-2 rounded-full bg-[#0B4F8A]"></span>
+                <span className="w-2 h-2 rounded-full bg-accent"></span>
                 <span className="font-bold text-slate-800 truncate">
                   {originLabel || destLabel ? `${originLabel || 'Origin'} ➔ ${destLabel || 'Destination'}` : 'Ad-hoc route planner'}
                 </span>
@@ -282,8 +284,8 @@ export default function MapComponent({
           ) : (
             <div className="bg-white/95 border border-slate-300 backdrop-blur-md p-3.5 rounded-lg shadow-lg text-slate-900 w-80 space-y-3">
               <div className="flex justify-between items-center border-b border-slate-200 pb-2">
-                <h3 className="font-bold text-xs uppercase tracking-wider text-[#0B4F8A] flex items-center gap-1.5">
-                  <span>📍</span> THREAT-AWARE ROUTE PLANNER
+                <h3 className="font-bold text-xs uppercase tracking-wider text-accent flex items-center gap-1.5">
+                  <Icon name="route" size={14} /> THREAT-AWARE ROUTE PLANNER
                 </h3>
                 <button onClick={() => setCollapsed(true)} className="text-slate-400 hover:text-slate-700 font-bold text-xs">
                   ✕
@@ -313,8 +315,8 @@ export default function MapComponent({
                       }}
                       className="w-full text-[11px] text-left px-2.5 py-1 bg-slate-50 hover:bg-slate-100 text-slate-800 rounded border border-slate-200 transition font-medium truncate flex justify-between"
                     >
-                      <span className="truncate">📍 {p.name}</span>
-                      <span className="text-[9px] text-[#0B4F8A] font-bold">Select</span>
+                      <span className="truncate flex items-center gap-1"><Icon name="pin" size={12} />{p.name}</span>
+                      <span className="text-[9px] text-accent font-bold">Select</span>
                     </button>
                   ))}
                 </div>
@@ -330,7 +332,7 @@ export default function MapComponent({
                       placeholder="Search starting location..."
                       value={originInput}
                       onChange={e => setOriginInput(e.target.value)}
-                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-300 text-slate-900 rounded focus:border-[#0B4F8A] outline-none"
+                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-300 text-slate-900 rounded focus:border-accent outline-none"
                     />
                     <button type="submit" className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded text-xs border border-slate-300">
                       Search
@@ -347,7 +349,7 @@ export default function MapComponent({
                       placeholder="Search destination..."
                       value={destInput}
                       onChange={e => setDestInput(e.target.value)}
-                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-300 text-slate-900 rounded focus:border-[#0B4F8A] outline-none"
+                      className="flex-1 px-2.5 py-1 text-xs bg-white border border-slate-300 text-slate-900 rounded focus:border-accent outline-none"
                     />
                     <button type="submit" className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2 py-1 rounded text-xs border border-slate-300">
                       Search
@@ -383,7 +385,7 @@ export default function MapComponent({
                 <button 
                   onClick={handleCalculateRoute}
                   disabled={!origin || !destination || loading}
-                  className="flex-1 bg-[#0B4F8A] hover:bg-[#083B68] text-white py-1.5 rounded text-xs font-bold shadow-sm transition disabled:opacity-50"
+                  className="flex-1 bg-accent hover:bg-accent-strong text-white py-1.5 rounded text-xs font-bold shadow-sm transition disabled:opacity-50"
                 >
                   {loading ? 'CALCULATING...' : 'PLAN THREAT-AWARE ROUTE'}
                 </button>
@@ -401,9 +403,11 @@ export default function MapComponent({
 
       {/* Map Container */}
       <MapContainer center={center} zoom={showSatellite ? 13 : 12} className="h-full w-full z-0">
+        <MapAutoResize />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          className="basemap-tiles"
         />
 
         {/* NASA GIBS Satellite Layer when enabled */}
@@ -462,7 +466,7 @@ export default function MapComponent({
                   </span>
                 </div>
                 <div><b>Location:</b> {inc.district}, {inc.city || 'Hubballi'}</div>
-                <div><b>Problem Type:</b> <span className="font-bold text-[#0B4F8A]">{inc.hazard_type}</span></div>
+                <div><b>Problem Type:</b> <span className="font-bold text-accent">{inc.hazard_type}</span></div>
                 <div><b>Risk Score:</b> <strong className="text-red-700">{inc.risk_score}/100</strong></div>
                 <div><b>Operational Status:</b> <span className="font-bold text-emerald-800">{inc.status}</span></div>
                 <div className="text-slate-600 text-[11px] pt-1 border-t border-slate-200">{inc.description}</div>
@@ -508,7 +512,7 @@ export default function MapComponent({
           >
             <Popup>
               <div className="text-xs space-y-1 p-1">
-                <div className="font-extrabold text-sm text-[#0B4F8A]">{fu.name}</div>
+                <div className="font-extrabold text-sm text-accent">{fu.name}</div>
                 <div><b>Type:</b> {fu.unit_type}</div>
                 <div><b>Status:</b> <span className="font-bold text-emerald-700">{fu.status}</span></div>
                 {fu.target_incident_title && (

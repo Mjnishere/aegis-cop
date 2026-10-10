@@ -119,7 +119,7 @@ export default function AlertCenter({ onClose, selectedRegion }) {
   }
 
   return (
-    <div className="absolute inset-0 bg-[#F5F7FA] text-slate-900 z-50 flex flex-col p-4 overflow-hidden border border-slate-300">
+    <div className="absolute inset-0 bg-canvas text-slate-900 z-50 flex flex-col p-4 overflow-hidden border border-slate-300">
       
       {/* Toast Banner */}
       {toastMessage && (
@@ -132,9 +132,9 @@ export default function AlertCenter({ onClose, selectedRegion }) {
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center mb-4 bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm shrink-0">
+      <div className="flex justify-between items-center mb-4 bg-white p-4 rounded-md border border-line shadow-sm shrink-0">
         <div>
-          <h1 className="text-base font-extrabold tracking-tight text-[#0B4F8A] uppercase flex items-center gap-2">
+          <h1 className="text-base font-extrabold tracking-tight text-accent uppercase flex items-center gap-2">
             <span>📢</span> CITIZEN ALERT & BROADCAST CENTER
           </h1>
           <div className="text-xs font-bold text-slate-500 mt-0.5">● TARGETED GEOGRAPHIC ALERT DISPATCH</div>
@@ -146,8 +146,8 @@ export default function AlertCenter({ onClose, selectedRegion }) {
 
       <div className="flex gap-4 flex-1 overflow-hidden">
         {/* Active Alerts */}
-        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm overflow-y-auto">
-          <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#0B4F8A] border-b border-[#D9E0E8] pb-2 mb-3">
+        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-line shadow-sm overflow-y-auto">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-accent border-b border-line pb-2 mb-3">
             ACTIVE REGIONAL ALERTS ({alerts.length})
           </h2>
           {alerts.length === 0 ? <p className="text-slate-500 text-xs italic">No active alerts currently issued.</p> : (
@@ -178,8 +178,8 @@ export default function AlertCenter({ onClose, selectedRegion }) {
         </div>
 
         {/* Alert Preview */}
-        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm overflow-y-auto">
-          <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#0B4F8A] border-b border-[#D9E0E8] pb-2 mb-3">
+        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-line shadow-sm overflow-y-auto">
+          <h2 className="text-xs font-extrabold uppercase tracking-wider text-accent border-b border-line pb-2 mb-3">
             ALERT PREVIEW & BROADCAST DRAFT
           </h2>
           {!preview ? (
@@ -202,7 +202,7 @@ export default function AlertCenter({ onClose, selectedRegion }) {
               <button
                 onClick={handleSend}
                 disabled={sending}
-                className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-2 rounded text-xs transition shadow-sm"
+                className="w-full bg-accent hover:bg-accent-strong text-white font-bold py-2 rounded text-xs transition shadow-sm"
               >
                 {sending ? 'BROADCASTING...' : 'DISPATCH GEOGRAPHIC ALERT'}
               </button>

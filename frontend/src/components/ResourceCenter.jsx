@@ -143,7 +143,7 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
   const selectedIncidentObject = incidents.find(i => i.incident_id === selectedIncId) || sharedSelectedIncident;
 
   return (
-    <div className="h-full flex flex-col bg-[#F5F7FA] text-slate-900 p-4 space-y-4 overflow-hidden">
+    <div className="h-full flex flex-col bg-canvas text-slate-900 p-4 space-y-4 overflow-hidden">
       
       {/* Toast Notification Banner */}
       {toastMessage && (
@@ -156,9 +156,9 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm shrink-0">
+      <div className="flex justify-between items-center bg-white p-4 rounded-md border border-line shadow-sm shrink-0">
         <div>
-          <h1 className="text-base font-extrabold tracking-tight text-[#0B4F8A] uppercase flex items-center gap-2">
+          <h1 className="text-base font-extrabold tracking-tight text-accent uppercase flex items-center gap-2">
             <span>🚒</span> RESOURCE COMMAND & RESPONSE PLANNING
           </h1>
           <div className="text-xs font-bold text-slate-500 mt-0.5">● DISASTER RESPONSE RESOURCE DIRECTORY & DISPATCH ENGINE</div>
@@ -171,13 +171,13 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
       </div>
 
       {/* Resource Type Filters */}
-      <div className="flex gap-2 bg-white p-2.5 rounded-md border border-[#D9E0E8] shadow-sm shrink-0 overflow-x-auto text-xs font-bold">
+      <div className="flex gap-2 bg-white p-2.5 rounded-md border border-line shadow-sm shrink-0 overflow-x-auto text-xs font-bold">
         {['ALL', 'NDRF / RESCUE', 'PWD / DRAINAGE', 'AMBULANCE', 'BOAT', 'SUPPLIES'].map(filter => (
           <button
             key={filter}
             onClick={() => setTypeFilter(filter)}
             className={`px-3 py-1.5 rounded transition ${
-              typeFilter === filter ? 'bg-[#0B4F8A] text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              typeFilter === filter ? 'bg-accent text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             {filter}
@@ -188,8 +188,8 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
       <div className="flex gap-4 flex-1 overflow-hidden">
         
         {/* Left Resource Cards List */}
-        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm overflow-y-auto">
-          <div className="flex justify-between items-center border-b border-[#D9E0E8] pb-2 mb-3 shrink-0">
+        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-line shadow-sm overflow-y-auto">
+          <div className="flex justify-between items-center border-b border-line pb-2 mb-3 shrink-0">
             <h2 className="text-xs font-extrabold uppercase tracking-wider text-slate-800">
               RESPONSE TEAMS DIRECTORY ({filteredResources.length})
             </h2>
@@ -212,7 +212,7 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
                       {r.status}
                     </span>
                   </div>
-                  <div className="text-[#0B4F8A] font-bold text-[11px]">{r.resource_type}</div>
+                  <div className="text-accent font-bold text-[11px]">{r.resource_type}</div>
                   <div className="text-slate-600 text-[11px]">📍 {r.district}, {r.state}</div>
                   <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200 flex justify-between">
                     <span>Capacity: {r.capacity_people || r.capacity_units || 10}</span>
@@ -225,15 +225,15 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
         </div>
 
         {/* Right Main Command Area */}
-        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-[#D9E0E8] shadow-sm overflow-y-auto space-y-4 text-xs">
+        <div className="w-1/2 flex flex-col bg-white p-4 rounded-md border border-line shadow-sm overflow-y-auto space-y-4 text-xs">
           
           {/* Target Incident Selection */}
           <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
-            <label className="text-[10px] font-extrabold text-[#0B4F8A] uppercase tracking-wider block">TARGET INCIDENT FOR RESPONSE</label>
+            <label className="text-[10px] font-extrabold text-accent uppercase tracking-wider block">TARGET INCIDENT FOR RESPONSE</label>
             <select
               value={selectedIncId}
               onChange={e => setSelectedIncId(e.target.value)}
-              className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white text-slate-900 font-bold focus:border-[#0B4F8A] outline-none"
+              className="w-full border border-slate-300 rounded px-3 py-1.5 text-xs bg-white text-slate-900 font-bold focus:border-accent outline-none"
             >
               {incidents.length === 0 && <option value="" className="text-slate-900 bg-white">-- No Active Incidents --</option>}
               {incidents.map(inc => (
@@ -253,12 +253,12 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
           {/* AI Match Recommendation Card */}
           <div className="bg-blue-50/80 p-3.5 rounded border border-blue-200 space-y-2">
             <div className="flex justify-between items-center border-b border-blue-200 pb-1.5">
-              <span className="font-extrabold text-[10px] text-[#0B4F8A] uppercase tracking-wider">AI MATCH RECOMMENDATION</span>
-              <span className="text-[9px] bg-[#0B4F8A] text-white px-1.5 py-0.5 rounded font-bold">OPTIMAL</span>
+              <span className="font-extrabold text-[10px] text-accent uppercase tracking-wider">AI MATCH RECOMMENDATION</span>
+              <span className="text-[9px] bg-accent text-white px-1.5 py-0.5 rounded font-bold">OPTIMAL</span>
             </div>
 
             <div className="text-slate-900 font-bold">
-              Recommended Unit: <span className="text-[#0B4F8A]">Rescue Team Alpha</span>
+              Recommended Unit: <span className="text-accent">Rescue Team Alpha</span>
             </div>
             <div className="text-[11px] text-slate-700">
               <b>Reason:</b> Nearest available unit compatible with NDRF simulation specs (4.2 km from Dharwad sector)
@@ -273,7 +273,7 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
                 <button
                   onClick={handleGeneratePlan}
                   disabled={actionStatus?.type === 'loading'}
-                  className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-2 rounded text-xs transition shadow-sm disabled:opacity-50"
+                  className="w-full bg-accent hover:bg-accent-strong text-white font-bold py-2 rounded text-xs transition shadow-sm disabled:opacity-50"
                 >
                   {actionStatus?.type === 'loading' ? 'GENERATING PLAN...' : 'GENERATE RESPONSE PLAN'}
                 </button>
@@ -282,7 +282,7 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
                   <div className="bg-white p-2 rounded border border-blue-200 text-[11px] space-y-1">
                     <div className="flex justify-between font-bold">
                       <span>PLAN ID: {activePlan.plan_id.slice(0, 8)}...</span>
-                      <span className="text-[#0B4F8A]">{activePlan.status}</span>
+                      <span className="text-accent">{activePlan.status}</span>
                     </div>
                     <div><b>Priority:</b> {activePlan.priority}</div>
                   </div>
@@ -301,7 +301,7 @@ export default function ResourceCenter({ onClose, sharedSelectedIncident, incide
                     <button
                       onClick={handleDispatchAction}
                       disabled={actionStatus?.type === 'loading'}
-                      className="w-full bg-[#0B4F8A] hover:bg-[#083B68] text-white font-bold py-2 rounded text-xs transition shadow-sm disabled:opacity-50"
+                      className="w-full bg-accent hover:bg-accent-strong text-white font-bold py-2 rounded text-xs transition shadow-sm disabled:opacity-50"
                     >
                       {actionStatus?.type === 'loading' ? 'DISPATCHING...' : 'DISPATCH RESPONSE TEAM'}
                     </button>

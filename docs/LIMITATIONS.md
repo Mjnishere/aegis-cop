@@ -43,7 +43,7 @@ browser checks) is recorded in
 - **Threat confidence:** a single-source rule (MEDIUM/LOW, never HIGH). There is no
   multi-source corroboration.
 - **Weather:** Open-Meteo at **one point** for the whole city, and unavailable offline.
-  - The regional (IMD) risk feed is not configured, so the National tab shows no
+  - The regional (IMD) risk feed is not configured, so the Regional Overview tab shows no
     regions.
 - **Terrain:** a Digital Surface Model (includes buildings and canopy), not bare earth.
   - About 12.6% of the road graph lies west of the DEM tile.
@@ -51,8 +51,15 @@ browser checks) is recorded in
 - **Incident "severity score" (80/60/40):** fixed per severity level.
 - **Response-plan resource matching:** distance-based heuristic over a demo resource
   list.
-- **No-safe-route results are not persisted.** They are shown when computed and must be
-  recomputed after a page reload.
+- **Decision identity is self-declared.** Approvals and rejections record the name the
+  operator types and their reason, marked `SELF_DECLARED_NOT_AUTHENTICATED`. There is no
+  login, role check or signature.
+- **"Risk engine" incidents are demo fixtures.** With no regional risk feed configured,
+  SCAN FOR INCIDENTS (and the rain scenario) create incidents from a built-in list of
+  demo regions. They are labelled `DEMO:`, carry no official warning, and become threat
+  zones that re-check routes.
+- **Monitoring is event-driven, not continuous.** Routes are re-checked when a threat is
+  recorded, changed or closed, not on a timer; the display polls every 10 s.
 - **Persistence coverage:** some legacy modules keep state in memory (resources, alerts,
   citizens, legacy field evidence, audit logs).
 

@@ -23,13 +23,63 @@ does **not** mean validated against real-world outcomes; nothing in AEGIS is.
 | Check | Result |
 |---|---|
 | Environment | Python 3.12.3, `.venv`, `backend/requirements.lock.txt`; Node 20.19.5, `npm ci` from lock |
-| `cd backend && ../.venv/bin/python -m pytest` with `DEM_PATH` set | **130 passed**, 0 failed (network blocked in-process, temp SQLite) |
-| Same without the DEM | 103 passed, 27 skipped with explicit reasons |
-| Same without the DEM and the OSM graph | 66 passed, 64 skipped |
+| `cd backend && ../.venv/bin/python -m pytest` with `DEM_PATH` set | **137 passed**, 0 failed (network blocked in-process, temp SQLite) |
+| Same without the DEM | 110 passed, 27 skipped with explicit reasons |
+| Same without the DEM and the OSM graph | 68 passed, 69 skipped |
 | `npm run lint` | Exit 0; 0 errors, 62 warnings (pre-existing unused vars/hook deps). Extra `oxlint -D no-undef` scan: only browser globals |
 | `npm run build` | Success |
 | Browser rehearsal of the mission workflow (headless Chrome via CDP, offline backend on a fresh temp DB, Vite dev server) | Passed — see "Mission workflow and decision chain" |
 | `data/aegis.db` after all runs | Not created |
+
+## Fixes after the pitch review (2026-10-10) — Verified + browser-verified
+
+| Fix | Implementation | Evidence |
+|---|---|---|
+| Event-driven route re-check | `route_monitor_service.reassess_all` runs after threat create/update/close (`threat_service`), incident scan and incident status changes; transitions carry `trigger` (`THREAT_CHANGE`, `SIMULATED_REPORT`, `CHECK`); a REPLACED route that is still clear stays REPLACED; an unchanged compromised `/check` reports the stored reason | `tests/test_route_automation.py` (4 tests); browser: `scripts/demo/post_external_report.py` turned a REPLACED route INVALIDATED with no click |
+| Self-declared decision maker + reason | approve/reject accept `actor` and `reason` (sanitised, ≤ 80 / ≤ 500 chars, default "EOC operator"); responses mark `actor_basis: SELF_DECLARED_NOT_AUTHENTICATED`; UI fields "Decision by" and "Reason" | `tests/test_route_automation.py` (2 tests); browser: "REJECTED by Lt. A. Rao (Convoy holds for recce)" |
+| Persisted failed replacement searches | `monitored_routes.replacement_attempts` (JSON) + `init_db` migration for existing files; recorded for `NO_SAFE_AVAILABLE_ROUTE` / `NO_ROUTE` / `NO_BETTER_ROUTE`; chain and log read them | `tests/test_mission_workflow.py` (extended), `tests/test_schema_migration.py`; browser: "No safe route exists" after reload |
+| Built-in demo incidents labelled | scan fallback incidents titled `DEMO:`, no official warning, confidence MEDIUM, timeline "… not a detection"; result `source: BUILT_IN_DEMO_REGIONS`; UI scan message says so | `tests/test_route_automation.py` (1 test); browser: Incidents → SCAN FOR INCIDENTS |
+
+Still not done: authentication/roles (the name is self-declared), time-based monitoring,
+de-duplication/expiry of reports, persisted response plans.
+
+## Frontend redesign (2026-10-10) — Browser-verified
+
+Presentation-only change; no backend code or API contract changed (`git diff -- backend` empty).
+
+- Design tokens: Tailwind palettes mapped to CSS variables with separate background,
+  text and border scales (`frontend/scripts/generate-theme.mjs` → `src/theme/palette.css`);
+  semantic tokens `canvas`, `accent`, `line`. Dark theme by default; Light and System
+  selectable in the header (stored per browser in `localStorage`, applied before first paint).
+- Shell: icon-rail sidebar below 1280 px (labels from 1280 px), compact header
+  (branding, operating area, weather, backend status, the one implemented scenario
+  control, theme selector), inline SVG icon set (`components/ui/Icon.jsx`).
+- Overview: operational summary (COP summary counts + pending decisions on the active
+  mission, STALE SNAPSHOT chip when refresh fails), compact data-source list,
+  seven-stage decision-chain stepper, large map, compact threat queue with linked
+  evidence and threat-record timeline, mission panel with decision card first.
+- Map: dark re-toning of the OSM basemap only (satellite never recoloured),
+  collapsible layer panel (counts stay visible when collapsed), compromised route solid
+  red vs dashed green proposal, `MapAutoResize` re-measures maps after layout changes.
+- Truthfulness fixes found during the redesign: scenario banner no longer shows
+  fallback values (80 mm / 50 % blockage) absent from the backend config; weather card
+  says "scenario values" in scenario mode; Satellite and Regional headers state what is
+  (not) analysed/configured; a route already compromised at registration (no transition
+  recorded) is now explained as "since registration" instead of showing no impact.
+
+| Check | Result |
+|---|---|
+| `npm run lint` | Exit 0; 0 errors, 62 warnings (pre-existing). `oxlint -D no-undef`: browser globals only |
+| `npm run build` | Success (JS 512 kB / 149 kB gzip; Vite's 500 kB advisory warning) |
+| Full workflow, fresh DB, dark theme | start → simulated report → INVALIDATED → proposal (+1.0 km, +4 min, zones 1 → 0) → reject → recompute → approve → REPLACED; reload keeps state |
+| Light theme | Overview, Incidents, Field Operations, Weather (offline and scenario), Regional |
+| Widths (browser inner size) | 1582×904, 1348×772, 1262×804, 1006×772 — no horizontal page overflow; map re-measures after resize |
+| No-safe-route (`no_safe_route_case.py`) | "No safe route exists" in chain and panel; no approve button |
+| Backend stopped / restarted | UNREACHABLE, STALE SNAPSHOT, last-known sources, chain "unknown"; recovers after restart |
+| Rain scenario on/off | Scenario banner/values labelled; END RAIN SCENARIO deactivates (backend `active: false`) |
+
+Not verified: widths below ~1000 px (phones), keyboard-only navigation beyond visible
+focus styles, screen-reader output.
 
 ## Mission workflow and decision chain (2026-10-10) — Browser-verified
 
@@ -57,10 +107,9 @@ Browser rehearsal on a fresh seeded database (backend outbound calls blocked, DE
 | Weather tab offline | Plain-language "Weather data unavailable — conditions are unknown" with the raw provider error only under "Technical detail" |
 | National tab offline | No placeholder regions; empty state names the feed mode (`NOT_CONFIGURED`) |
 
-Known gaps:
-- A `NO_SAFE_AVAILABLE_ROUTE` result is not persisted; after a reload the chain shows
-  "No proposal on record" until recomputed.
-- Tested at one viewport (≈1580×900); smaller laptop widths were not exercised.
+Known gaps (at the time of this run; both closed later — see "Fixes after the pitch review"):
+- A `NO_SAFE_AVAILABLE_ROUTE` result was not persisted.
+- Tested at one viewport (≈1580×900).
 
 ### Earlier browser verification (2026-10-10, COP layers)
 

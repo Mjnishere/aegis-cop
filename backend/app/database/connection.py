@@ -61,6 +61,11 @@ def init_db():
             if "evidence_references" not in columns:
                 conn.execute(text("ALTER TABLE incidents ADD COLUMN evidence_references JSON DEFAULT '[]'"))
             conn.commit()
+        if "monitored_routes" in inspector.get_table_names():
+            columns = [c["name"] for c in inspector.get_columns("monitored_routes")]
+            if "replacement_attempts" not in columns:
+                conn.execute(text("ALTER TABLE monitored_routes ADD COLUMN replacement_attempts JSON DEFAULT '[]'"))
+            conn.commit()
 
 # Auto-initialize database tables on connection setup
 init_db()
